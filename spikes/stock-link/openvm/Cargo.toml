@@ -1,0 +1,18 @@
+[package]
+name = "zkvm-openvm"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+ere-platform-openvm = { path = "../../../crates/platform/openvm", default-features = false, features = ["getrandom-unsupported", "zkvm-accelerator"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview", default-features = false }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"

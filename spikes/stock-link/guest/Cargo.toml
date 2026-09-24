@@ -1,0 +1,14 @@
+[package]
+name = "stock-link-guest"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+zkvm-interface = { git = "https://github.com/eth-act/zkvm-standards", rev = "282cd356c3a0498416bb0619f9c8a347ce9933fb" }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"
