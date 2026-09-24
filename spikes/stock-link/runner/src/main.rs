@@ -12,6 +12,8 @@ use sha2::Digest;
 
 #[cfg(feature = "openvm")]
 mod openvm;
+#[cfg(feature = "sp1")]
+mod sp1;
 #[cfg(feature = "zisk")]
 mod zisk;
 
@@ -32,6 +34,8 @@ fn main() {
 
     #[cfg(feature = "openvm")]
     let (zkvm, execution) = ("openvm", openvm::execute(&elf, &input));
+    #[cfg(feature = "sp1")]
+    let (zkvm, execution) = ("sp1", sp1::execute(&elf, &input));
     #[cfg(feature = "zisk")]
     let (zkvm, execution) = ("zisk", zisk::execute(&elf, &input));
 

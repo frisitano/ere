@@ -14,6 +14,9 @@ rustflags=(-Clinker-plugin-lto -Cpasses=lower-atomic "-Clink-arg=-L$here/out" "-
 for arg in "$@"; do rustflags+=("-Clink-arg=$arg"); done
 
 export CARGO_TARGET_DIR="$here/target/guest-$lib"
+# Cargo does not track the vendor archive, so force the guest to relink against the current one.
+cargo +nightly clean --release --quiet --manifest-path "$here/guest/Cargo.toml" -p stock-link-guest \
+    --target "$here/targets/riscv64ima-unknown-none-elf.json" -Zjson-target-spec
 RUSTFLAGS="${rustflags[*]}" cargo +nightly build --release \
     --manifest-path "$here/guest/Cargo.toml" \
     -Zbuild-std=core,panic_abort -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec \

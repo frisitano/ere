@@ -27,9 +27,16 @@ for member in *; do
 done
 
 "$LLVM_BIN/llvm-link" "${bitcode[@]}" -o merged.bc
+
+# Module-level asm (for example a `_start` in `global_asm!`) can name a Rust symbol the IR does not
+# see as used. Keep every symbol the module both defines and references, or it would be removed.
+"$LLVM_BIN/llvm-nm" merged.bc | awk '$1 == "U" {print $2}' | sort -u > undefined.txt
+"$LLVM_BIN/llvm-nm" --defined-only merged.bc | awk '{print $NF}' | sort -u > defined.txt
+public=$( (cat "$exports"; comm -12 undefined.txt defined.txt) | sort -u | paste -sd, -)
+
 "$LLVM_BIN/opt" merged.bc -o vendor.bc \
     -passes='internalize,globaldce' \
-    -internalize-public-api-list="$(paste -sd, "$exports")"
+    -internalize-public-api-list="$public"
 
 rm -f "$output"
 "$LLVM_BIN/llvm-ar" rcs "$output" vendor.bc "${native[@]}"
