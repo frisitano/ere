@@ -7,11 +7,14 @@
 # The result is still bitcode, so the guest link can inline across the `zkvm_*` boundary.
 # Native (non-bitcode) members are kept as they are.
 #
-# Usage: vendor-archive.sh <input.a> <output.a> [exports-file]
+# Usage: [LTO=thin|full] vendor-archive.sh <input.a> <output.a> [exports-file]
+#   LTO=thin (default) writes ThinLTO bitcode with a summary, so a ThinLTO guest can import and
+#   inline from it; LTO=full writes a plain module for a full-LTO link.
 #   The export list defaults to `exports.txt`.
 set -euo pipefail
 
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}
+lto=${LTO:-thin}
 here=$(cd "$(dirname "$0")" && pwd)
 input=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 output=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
@@ -35,7 +38,7 @@ done
 public=$( (cat "$exports"; comm -12 undefined.txt defined.txt) | sort -u | paste -sd, -)
 
 "$LLVM_BIN/opt" merged.bc -o vendor.bc \
-    -passes='internalize,globaldce' \
+    -passes='internalize,globaldce' $([[ $lto == thin ]] && echo --thinlto-bc) \
     -internalize-public-api-list="$public"
 
 rm -f "$output"

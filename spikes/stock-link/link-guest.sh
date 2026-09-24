@@ -2,6 +2,8 @@
 # Builds the zkVM-agnostic guest with stock nightly Rust and links it against one vendor archive
 # with linker-plugin LTO. Only the link line differs between zkVMs.
 #
+# GUEST_RUSTFLAGS adds rustc flags for the guest, e.g. to choose its LTO mode.
+#
 # Usage: link-guest.sh <vendor-lib-name> <output-elf> [extra link args...]
 #   e.g. link-guest.sh zkvm_openvm out/guest-openvm.elf -Ttext=0x00200800
 set -euo pipefail
@@ -10,7 +12,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 lib=$1 output=$2
 shift 2
 
-rustflags=(-Clinker-plugin-lto -Cpasses=lower-atomic "-Clink-arg=-L$here/out" "-Clink-arg=-l$lib")
+rustflags=(-Clinker-plugin-lto -Cpasses=lower-atomic ${GUEST_RUSTFLAGS:-} "-Clink-arg=-L$here/out" "-Clink-arg=-l$lib")
 for arg in "$@"; do rustflags+=("-Clink-arg=$arg"); done
 
 export CARGO_TARGET_DIR="$here/target/guest-$lib"
