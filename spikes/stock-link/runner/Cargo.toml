@@ -17,5 +17,10 @@ openvm-sdk = { git = "https://github.com/han0110/openvm.git", branch = "patch/v2
 openvm-sdk-config = { git = "https://github.com/han0110/openvm.git", branch = "patch/v2.1.0-preview", default-features = false, optional = true }
 openvm-transpiler = { git = "https://github.com/han0110/openvm.git", branch = "patch/v2.1.0-preview", default-features = false, optional = true }
 
+# ZisK, same versions as the ere workspace
+zisk-transpiler-riscv = { version = "1.2.0-alpha", optional = true }
+ziskemu = { version = "1.2.0-alpha", optional = true }
+
 [features]
 openvm = ["dep:ere-verifier-openvm", "dep:openvm-circuit", "dep:openvm-sdk", "dep:openvm-sdk-config", "dep:openvm-transpiler"]
+zisk = ["dep:zisk-transpiler-riscv", "dep:ziskemu"]

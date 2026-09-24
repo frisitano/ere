@@ -7,13 +7,15 @@
 # The result is still bitcode, so the guest link can inline across the `zkvm_*` boundary.
 # Native (non-bitcode) members are kept as they are.
 #
-# Usage: vendor-archive.sh <input.a> <output.a>
+# Usage: vendor-archive.sh <input.a> <output.a> [exports-file]
+#   The export list defaults to `exports.txt`.
 set -euo pipefail
 
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}
 here=$(cd "$(dirname "$0")" && pwd)
 input=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 output=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
+exports=$(cd "$(dirname "${3:-$here/exports.txt}")" && pwd)/$(basename "${3:-exports.txt}")
 
 work=$(mktemp -d "${AGENT_TMPDIR:-${TMPDIR:-/tmp}}/vendor-archive.XXXXXX")
 cd "$work"
@@ -27,7 +29,7 @@ done
 "$LLVM_BIN/llvm-link" "${bitcode[@]}" -o merged.bc
 "$LLVM_BIN/opt" merged.bc -o vendor.bc \
     -passes='internalize,globaldce' \
-    -internalize-public-api-list="$(paste -sd, "$here/exports.txt")"
+    -internalize-public-api-list="$(paste -sd, "$exports")"
 
 rm -f "$output"
 "$LLVM_BIN/llvm-ar" rcs "$output" vendor.bc "${native[@]}"

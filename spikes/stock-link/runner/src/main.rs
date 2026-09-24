@@ -12,6 +12,8 @@ use sha2::Digest;
 
 #[cfg(feature = "openvm")]
 mod openvm;
+#[cfg(feature = "zisk")]
+mod zisk;
 
 /// Result of one execution.
 struct Execution {
@@ -30,6 +32,8 @@ fn main() {
 
     #[cfg(feature = "openvm")]
     let (zkvm, execution) = ("openvm", openvm::execute(&elf, &input));
+    #[cfg(feature = "zisk")]
+    let (zkvm, execution) = ("zisk", zisk::execute(&elf, &input));
 
     let output = &execution.output[..64];
     println!("zkvm          {zkvm}");

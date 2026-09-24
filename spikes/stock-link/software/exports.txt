@@ -1,0 +1,2 @@
+zkvm_keccak256
+zkvm_sha256
