@@ -8,13 +8,13 @@
 # Native (non-bitcode) members are kept as they are.
 #
 # Usage: [LTO=thin|full] vendor-archive.sh <input.a> <output.a> [exports-file]
-#   LTO=thin (default) writes ThinLTO bitcode with a summary, so a ThinLTO guest can import and
-#   inline from it; LTO=full writes a plain module for a full-LTO link.
+#   LTO=thin writes ThinLTO bitcode with a summary, so a ThinLTO guest can import and
+#   inline from it; LTO=full (default) writes a plain module for a full-LTO link.
 #   The export list defaults to `exports.txt`.
 set -euo pipefail
 
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}
-lto=${LTO:-thin}
+lto=${LTO:-full}
 here=$(cd "$(dirname "$0")" && pwd)
 input=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 output=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
