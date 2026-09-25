@@ -5,7 +5,8 @@
 #   split  vendor module full-LTO, guest ThinLTO: lld optimizes them in separate partitions, so
 #          the guest cannot inline vendor functions
 #   thin   vendor module ThinLTO (with summary): the guest can import and inline them
-#   full   one module (full-lto-link.py): guest and vendor optimized together, like lto = "fat"
+#   full   guest compiled as one fat-LTO bitcode module, linked with the full-LTO vendor module
+#          (link-guest-fat.sh): guest and vendor optimized together, like lto = "fat"
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -28,8 +29,7 @@ for entry in "${vendors[@]}"; do
     {
         ./link-guest.sh "zkvm_${zkvm}_full" "out/guest-$zkvm-split.elf" $link >/dev/null 2>&1
         ./link-guest.sh "zkvm_${zkvm}_thin" "out/guest-$zkvm-thin.elf" $link >/dev/null 2>&1
-        FULL_LTO_LIBS="zkvm_${zkvm}_full" GUEST_RUSTFLAGS="-Clinker=$here/full-lto-link.py" \
-            ./link-guest.sh "zkvm_${zkvm}_full" "out/guest-$zkvm-full.elf" $link >/dev/null 2>&1
+        ./link-guest-fat.sh "zkvm_${zkvm}_full" "out/guest-$zkvm-full.elf" $link >/dev/null 2>&1
     }
 done
 

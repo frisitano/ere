@@ -87,12 +87,12 @@ Instruction counts; every output matched the host:
 | OpenVM |             0 |   1,506 |   1,474 |     747 |        -50.4% |
 | OpenVM |         1,000 |   3,049 |   3,465 |   2,292 |        -24.8% |
 | OpenVM |        10,000 |  16,841 |  21,487 |  16,084 |         -4.5% |
-| ZisK   |             0 |   1,022 |   1,083 |     936 |         -8.4% |
-| ZisK   |         1,000 |   4,952 |   5,014 |   4,060 |        -18.0% |
-| ZisK   |        10,000 |  41,909 |  41,971 |  33,427 |        -20.2% |
-| SP1    |             0 |   3,140 |   3,253 |   3,017 |         -3.9% |
-| SP1    |         1,000 |  14,600 |  14,724 |  14,480 |         -0.8% |
-| SP1    |        10,000 | 116,650 | 116,906 | 116,530 |         -0.1% |
+| ZisK   |             0 |   1,022 |   1,083 |     925 |         -9.5% |
+| ZisK   |         1,000 |   4,952 |   5,014 |   4,049 |        -18.2% |
+| ZisK   |        10,000 |  41,909 |  41,971 |  33,416 |        -20.3% |
+| SP1    |             0 |   3,140 |   3,253 |   3,015 |         -4.0% |
+| SP1    |         1,000 |  14,600 |  14,724 |  14,478 |         -0.8% |
+| SP1    |        10,000 | 116,650 | 116,906 | 116,528 |         -0.1% |
 
 - Split: vendor module without a ThinLTO summary, guest ThinLTO (rustc's only output under
   `-Clinker-plugin-lto`). lld optimizes the two in separate partitions, and ThinLTO cannot
@@ -101,12 +101,13 @@ Instruction counts; every output matched the host:
 - Thin: vendor module written with `--thinlto-bc`. The guest imports and inlines the small
   wrappers, but the vendor internals are optimized module by module; OpenVM loses ground at
   larger inputs.
-- Full: `full-lto-link.py`, passed as `-Clinker=`, merges guest, vendor and needed rlib bitcode
-  into one module without a summary, then calls `rust-lld`. This is a single full-LTO O3 over
-  everything, the equivalent of `lto = "fat"`. It is the fastest and smallest on all three
-  zkVMs, and the inliner inlined `zkvm_keccak256` and `zkvm_sha256` into `main` on cost alone,
-  without `always_inline`. The wrapper exists because rustc cannot emit unified-LTO bitcode,
-  and lld's `--lto=full` rejects rustc's ThinLTO bitcode.
+- Full: `link-guest-fat.sh`, the usual two-step full-LTO build. rustc compiles the guest with
+  `-Clto=fat --emit=llvm-bc` into one bitcode module with no ThinLTO summary, and `rust-lld`
+  links it with the vendor module at `-plugin-opt=O3`. Both are plain modules, so lld optimizes
+  guest and vendor as one, the equivalent of `lto = "fat"`. This is the fastest and smallest on
+  all three zkVMs, and the inliner inlined `zkvm_keccak256` and `zkvm_sha256` into `main` on
+  cost alone, without `always_inline`. lld's `--lto=full` is no alternative: it requires
+  unified-LTO bitcode, which rustc does not emit.
 
 SP1 gains least because its syscalls are primitives (keccak-f, SHA extend/compress), so most
 instructions are in the sponge and padding loops, which LTO mode barely changes.
