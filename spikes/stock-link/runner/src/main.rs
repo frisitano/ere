@@ -5,6 +5,7 @@
 //! from a software fallback.
 //!
 //! Usage: stock-link-runner <elf> <input-len>
+//!        stock-link-runner <elf> --raw <input-file>   (prints the output instead of checking it)
 
 use std::{env, fs};
 
@@ -26,6 +27,19 @@ struct Execution {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let elf = fs::read(&args[1]).expect("read ELF");
+    if args[2] == "--raw" {
+        let input = fs::read(&args[3]).expect("read input");
+        #[cfg(feature = "openvm")]
+        let execution = openvm::execute(&elf, &input);
+        #[cfg(feature = "sp1")]
+        let execution = sp1::execute(&elf, &input);
+        #[cfg(feature = "zisk")]
+        let execution = zisk::execute(&elf, &input);
+        println!("input         {} bytes", input.len());
+        println!("instructions  {}", execution.instructions);
+        println!("output        {}", hex::encode(&execution.output));
+        return;
+    }
     let len: usize = args[2].parse().expect("input length");
     let input: Vec<u8> = (0..len).map(|i| (i * 31 + 7) as u8).collect();
 
