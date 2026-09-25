@@ -10,5 +10,5 @@ zkvm-interface = { git = "https://github.com/eth-act/zkvm-standards", rev = "282
 
 [profile.release]
 codegen-units = 1
-lto = "off"
+lto = "fat"
 panic = "abort"

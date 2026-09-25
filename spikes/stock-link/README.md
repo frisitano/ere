@@ -1,7 +1,26 @@
-# Stock-link spike: one guest, three zkVMs, linked by `rust-lld` with linker-plugin LTO
+# Stock-link spike: one guest, three zkVMs, plain `cargo build` plus a vendor SDK
 
 Spike, not production code. It tests whether a guest can be built with a stock nightly Rust
 toolchain and get its zkVM accelerators and runtime only at link time, from a vendor archive.
+
+The guest is built with an ordinary `cargo build --release`. The only zkVM-specific input is an
+SDK directory with two files, the shape the zkvm-standards "Static Library and Linker Script"
+proposal describes:
+
+```text
+out/sdk/<zkvm>/
+├── libzkvm.a   vendor archive: one LLVM bitcode module exporting only the standard symbols
+└── zkvm.ld     vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
+```
+
+```bash
+cd guest
+cargo +nightly build --release \
+    --config 'target.riscv64ima-unknown-none-elf.rustflags = ["-Clink-arg=-L<sdk>", "-Clink-arg=-T<sdk>/zkvm.ld"]'
+```
+
+Everything else is zkVM independent and lives in `guest/.cargo/config.toml` (target spec,
+`build-std`, `-Clinker-plugin-lto`) and `guest/Cargo.toml` (`lto = "fat"`).
 
 ## What is built
 
@@ -35,14 +54,22 @@ toolchain and get its zkVM accelerators and runtime only at link time, from a ve
   longer collide with the guest's. The first link failed on a duplicate
   `__rustc::rust_begin_unwind` until this step existed.
 
-- `link-guest.sh`: builds the guest for the plain `riscv64ima-unknown-none-elf` spec and links it
-  with `-l<vendor>` and the vendor's linker settings. This link line is the only per-zkVM part:
-  OpenVM `-Ttext=0x00200800`, ZisK `linker/zisk.ld`, SP1 `linker/sp1.ld` (from SP1's `zkevm/`).
+- Linker scripts in `linker/`: ZisK's own (`zisk.ld`), SP1's from its `zkevm/` SDK
+  (`sp1.ld`), and `openvm.ld`, written here because OpenVM ships none. It reproduces the layout
+  ere gets from `-Ttext=0x00200800`. `run-all.sh` prepends `INPUT(-lzkvm)` to each script to
+  make the SDK's `zkvm.ld`.
+
+- `build-guest.sh <sdk-dir> <elf>`: the `cargo build` above. Cargo does not track the SDK files,
+  so it cleans the guest package first to force a relink.
 
 - `software/`: negative control. It exports only `zkvm_keccak256` and `zkvm_sha256`, implemented
-  with RustCrypto. The vendor archive is re-internalized without those two symbols
-  (`exports-without-hashes.txt`), so the link takes the software ones and everything else from
-  the vendor.
+  with RustCrypto. The control SDK (`out/sdk/<zkvm>-software`) holds the vendor archive
+  re-internalized without those two symbols (`exports-without-hashes.txt`) plus the software
+  archive (`INPUT(-lzkvm -lzkvm_software)`), so the link takes the software hashes and
+  everything else from the vendor.
+
+- `link-guest.sh`: links with `-l<vendor>` and without rustc-side LTO. It exists only to
+  reproduce the split and thin variants in `compare-lto.sh`.
 
 - `runner/`: host runner. It executes an ELF on the zkVM's own executor (OpenVM interpreter,
   `ziskemu`, SP1 `MinimalExecutor`), checks the output against host keccak256/sha256 and prints
@@ -50,22 +77,24 @@ toolchain and get its zkVM accelerators and runtime only at link time, from a ve
 
 ## Results
 
-`./run-all.sh` on 2026-09-25 (macOS arm64, nightly 1.96 / LLVM 22.1.0, Homebrew LLVM 22.1.8).
-Every run's output matched the host digests.
+`./run-all.sh` on 2026-09-25 (macOS arm64, nightly 1.96 / LLVM 22.1.0, Homebrew LLVM 22.1.8),
+both columns built with plain `cargo build` and full LTO. Counts are instructions retired by
+each zkVM's executor, not proving cost. Every run's output matched the host digests.
 
 | zkVM   | Input (bytes) | Accelerated (instr.) | Software control (instr.) | Ratio |
 | ------ | ------------: | -------------------: | ------------------------: | ----: |
-| OpenVM |             0 |                1,506 |                    12,390 |  8.2x |
-| OpenVM |         1,000 |                3,049 |                   123,829 | 40.6x |
-| OpenVM |        10,000 |               16,841 |                 1,169,534 | 69.4x |
-| ZisK   |             0 |                1,022 |                    11,951 | 11.7x |
-| ZisK   |         1,000 |                4,952 |                   123,313 | 24.9x |
-| ZisK   |        10,000 |               41,909 |                 1,168,942 | 27.9x |
-| SP1    |             0 |                3,140 |                    13,516 |  4.3x |
-| SP1    |         1,000 |               14,600 |                   124,882 |  8.6x |
-| SP1    |        10,000 |              116,650 |                 1,170,576 | 10.0x |
+| OpenVM |             0 |                  747 |                    11,669 | 15.6x |
+| OpenVM |         1,000 |                2,292 |                   122,286 | 53.4x |
+| OpenVM |        10,000 |               16,084 |                 1,160,269 | 72.1x |
+| ZisK   |             0 |                  925 |                    11,870 | 12.8x |
+| ZisK   |         1,000 |                4,049 |                   122,407 | 30.2x |
+| ZisK   |        10,000 |               33,416 |                 1,160,314 | 34.7x |
+| SP1    |             0 |                3,015 |                    13,368 |  4.4x |
+| SP1    |         1,000 |               14,478 |                   123,909 |  8.6x |
+| SP1    |        10,000 |              116,528 |                 1,161,881 | 10.0x |
 
-Static evidence in the accelerated ELFs:
+Static evidence, checked on the split build (below), where `zkvm_keccak256` and `zkvm_sha256`
+are still separate functions; in the full-LTO build they are inlined into `main`:
 
 - OpenVM: `zkvm_keccak256` and `zkvm_sha256` contain custom-0 (`opcode 0x0b`) instructions.
 - ZisK: `zkvm_keccak256` writes CSR `0x800` (keccak-f); `zkvm_sha256` writes CSR `0x805`
@@ -74,12 +103,12 @@ Static evidence in the accelerated ELFs:
   `zkvm_sha256` calls the patched `compress256`, which issues the `SHA_EXTEND`/`SHA_COMPRESS`
   ecalls.
 
-LTO kept only what the guest calls: the OpenVM guest is 27 KB, without the other 18
+LTO keeps only what the guest calls: the full-LTO OpenVM guest is 22 KB, without the other 18
 accelerators.
 
 ## LTO mode: split, thin, full
 
-`./compare-lto.sh` (after `run-all.sh`) links the same guest and vendor code three ways.
+`./compare-lto.sh` (after `run-all.sh`) builds the same guest and vendor code three ways.
 Instruction counts; every output matched the host:
 
 | zkVM   | Input (bytes) |   Split |    Thin |    Full | Full vs split |
@@ -94,20 +123,18 @@ Instruction counts; every output matched the host:
 | SP1    |         1,000 |  14,600 |  14,724 |  14,478 |         -0.8% |
 | SP1    |        10,000 | 116,650 | 116,906 | 116,528 |         -0.1% |
 
-- Split: vendor module without a ThinLTO summary, guest ThinLTO (rustc's only output under
-  `-Clinker-plugin-lto`). lld optimizes the two in separate partitions, and ThinLTO cannot
+- Split: vendor module without a ThinLTO summary, guest ThinLTO (what rustc emits under
+  `-Clinker-plugin-lto` when the profile has no `lto`). lld optimizes the two in separate partitions, and ThinLTO cannot
   import from a module without a summary, so inline remarks report the vendor functions as
   "NoDefinition" for `main`. This was the first version of the spike.
 - Thin: vendor module written with `--thinlto-bc`. The guest imports and inlines the small
   wrappers, but the vendor internals are optimized module by module; OpenVM loses ground at
   larger inputs.
-- Full: `link-guest-fat.sh`, the usual two-step full-LTO build. rustc compiles the guest with
-  `-Clto=fat --emit=llvm-bc` into one bitcode module with no ThinLTO summary, and `rust-lld`
-  links it with the vendor module at `-plugin-opt=O3`. Both are plain modules, so lld optimizes
-  guest and vendor as one, the equivalent of `lto = "fat"`. This is the fastest and smallest on
-  all three zkVMs, and the inliner inlined `zkvm_keccak256` and `zkvm_sha256` into `main` on
-  cost alone, without `always_inline`. lld's `--lto=full` is no alternative: it requires
-  unified-LTO bitcode, which rustc does not emit.
+- Full: `build-guest.sh`, plain `cargo build` with `lto = "fat"` and `-Clinker-plugin-lto`.
+  rustc runs fat LTO over the guest and `core` and hands the linker one bitcode module without a
+  ThinLTO summary, and lld's LTO (`-plugin-opt=O3`) optimizes it together with the vendor module.
+  This is the fastest and smallest on all three zkVMs, and the inliner inlined
+  `zkvm_keccak256` and `zkvm_sha256` into `main` on cost alone, without `always_inline`.
 
 SP1 gains least because its syscalls are primitives (keccak-f, SHA extend/compress), so most
 instructions are in the sponge and padding loops, which LTO mode barely changes.
@@ -126,18 +153,21 @@ instructions are in the sponge and padding loops, which LTO mode barely changes.
 4. SP1's `libzkevm` needs `std` through transitive dependencies. Stock `-Zbuild-std=std` works,
    using upstream's `target_os = "zkvm"` port, whose `sys_*` functions `sp1-zkvm` defines. No
    Succinct toolchain was needed.
-5. Cargo does not track an external archive. `link-guest.sh` cleans the guest package so it
-   relinks every time; an earlier stale ELF made SP1's runtime look unaccelerated.
+5. Cargo does not track an external archive. `build-guest.sh` and `link-guest.sh` clean the guest
+   package so it relinks every time; an earlier stale ELF made SP1's runtime look unaccelerated.
 6. Bitcode archives tie the vendor to the linker's LLVM major version (22 here). A vendor that
    cannot guarantee that could ship native objects instead, losing only cross-boundary inlining.
-7. The best code needs one full-LTO module across guest and vendor (previous section). A vendor
-   archive holding a plain bitcode module supports that; ThinLTO bitcode also works but
-   optimizes worse here.
+7. The best code needs one full-LTO module across guest and vendor (previous section). Plain
+   cargo does this with `lto = "fat"` and `-Clinker-plugin-lto`, provided the vendor archive
+   holds a plain bitcode module. ThinLTO bitcode also links but optimizes worse here.
+8. The vendor linker script can name the vendor archive (`INPUT(-lzkvm)`), so the guest-side
+   link configuration is the same for every zkVM: `-T <sdk>/zkvm.ld` and `-L <sdk>`.
 
 ## Open
 
-- Only `zkvm_keccak256` and `zkvm_sha256` are exercised. The other 18 symbols are exported by each archive but not
-  linked or run here; ere's `ZkvmInterfaceProgram` vectors should run through this path.
+- Only `zkvm_keccak256` and `zkvm_sha256` are exercised. The other 18 symbols are exported by
+  each archive but not linked or run here; ere's `ZkvmInterfaceProgram` vectors should run
+  through this path.
 - The guest does not allocate. A guest heap and the vendor's internal heap would both start at
   the end of `.bss` (`_end`, `_heap_bottom`), so heap ownership has to be specified before a real
   guest (reth, ethrex) can use this.
@@ -152,4 +182,5 @@ instructions are in the sponge and padding loops, which LTO mode barely changes.
 # ZisK's host emulator links a C++ library whose Makefile expects full Xcode; with only the
 # Command Line Tools, point it at their SDK and use Apple clang.
 MAKEFLAGS="SDKPATH=$(xcrun --show-sdk-path)" CC=/usr/bin/clang CXX=/usr/bin/clang++ ./run-all.sh
+./compare-lto.sh
 ```

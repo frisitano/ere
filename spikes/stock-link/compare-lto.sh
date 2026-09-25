@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Compares three LTO setups for the same guest and vendor code on every zkVM. Run `run-all.sh`
-# first: it builds the vendor staticlibs and runners this script reuses.
+# first: it builds the vendor staticlibs, SDK directories and runners this script reuses.
 #
 #   split  vendor module full-LTO, guest ThinLTO: lld optimizes them in separate partitions, so
 #          the guest cannot inline vendor functions
 #   thin   vendor module ThinLTO (with summary): the guest can import and inline them
-#   full   guest compiled as one fat-LTO bitcode module, linked with the full-LTO vendor module
-#          (link-guest-fat.sh): guest and vendor optimized together, like lto = "fat"
+#   full   guest built by plain cargo with lto = "fat" against the SDK directory
+#          (build-guest.sh): guest and vendor optimized together as one module
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -29,7 +29,7 @@ for entry in "${vendors[@]}"; do
     {
         ./link-guest.sh "zkvm_${zkvm}_full" "out/guest-$zkvm-split.elf" $link >/dev/null 2>&1
         ./link-guest.sh "zkvm_${zkvm}_thin" "out/guest-$zkvm-thin.elf" $link >/dev/null 2>&1
-        ./link-guest-fat.sh "zkvm_${zkvm}_full" "out/guest-$zkvm-full.elf" $link >/dev/null 2>&1
+        ./build-guest.sh "out/sdk/$zkvm" "out/guest-$zkvm-full.elf" >/dev/null 2>&1
     }
 done
 

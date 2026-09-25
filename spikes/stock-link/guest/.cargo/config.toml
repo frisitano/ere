@@ -1,0 +1,14 @@
+# Everything here is zkVM independent. The zkVM is chosen at build time by adding its SDK
+# directory (`libzkvm.a` + `zkvm.ld`) to the link, see `build-guest.sh`.
+
+[build]
+target = "../targets/riscv64ima-unknown-none-elf.json"
+
+[unstable]
+build-std = ["core", "panic_abort"]
+build-std-features = ["compiler-builtins-mem"]
+json-target-spec = true
+
+[target.riscv64ima-unknown-none-elf]
+# Emit bitcode for the link, so lld's LTO sees guest and vendor code together.
+rustflags = ["-Clinker-plugin-lto", "-Cpasses=lower-atomic"]
