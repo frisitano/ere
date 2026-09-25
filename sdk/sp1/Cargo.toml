@@ -1,0 +1,23 @@
+[package]
+name = "zkvm-sp1"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# SP1's C-ABI SDK: `_start` (sp1-zkvm), `read_input`/`write_output` and every `zkvm_*` symbol.
+libzkevm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0" }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"
+
+# A vendor archive is built with the vendor's patch set. Without this, `sp1-zkvm`'s public-values
+# hasher resolves to crates.io `sha2` and runs in software inside the runtime.
+[patch.crates-io]
+sha2 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", tag = "patch-sha2-0.10.9-sp1-6.2.0" }

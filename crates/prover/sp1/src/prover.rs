@@ -132,13 +132,14 @@ mod tests {
     use std::sync::OnceLock;
 
     use ere_compiler_core::{Compiler, Elf};
+    use ere_compiler_sdk::SdkRustRv64ima;
     use ere_compiler_sp1::SP1RustRv64imaCustomized;
     use ere_prover_core::{Input, ProverResource, RemoteProverConfig, codec::Encode, zkVMProver};
     use ere_util_test::{
         codec::BincodeLegacy,
         host::{
             TestCase, run_zkvm_execute, run_zkvm_execute_estimated_cost, run_zkvm_prove,
-            testing_guest_directory,
+            testing_guest_directory, testing_sdk,
         },
         program::{
             basic::BasicProgram,
@@ -309,6 +310,19 @@ mod tests {
     fn test_execute_zkvm_interface() {
         let elf = SP1RustRv64imaCustomized
             .compile(testing_guest_directory("sp1", "zkvm_interface"), &[])
+            .unwrap();
+        let zkvm = SP1Prover::new(elf, ProverResource::Cpu).unwrap();
+
+        for test_case in zkvm_interface::test_cases() {
+            run_zkvm_execute(&zkvm, &test_case);
+        }
+    }
+
+    /// The zkVM-agnostic `zkvm_interface` guest, linked against the sp1 SDK.
+    #[test]
+    fn test_execute_zkvm_interface_sdk() {
+        let elf = SdkRustRv64ima::new(testing_sdk("sp1"))
+            .compile(testing_guest_directory("zkvm", "zkvm_interface"), &[])
             .unwrap();
         let zkvm = SP1Prover::new(elf, ProverResource::Cpu).unwrap();
 

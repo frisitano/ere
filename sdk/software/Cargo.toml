@@ -1,0 +1,23 @@
+[package]
+name = "zkvm-software"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# Pure-Rust backends only: no `secp256k1`, `blst` or `c-kzg`, which need a C cross compiler.
+revm-precompile = { version = "42.0.1", default-features = false, features = ["std"] }
+k256 = { version = "0.13.4", default-features = false, features = ["ecdsa"] }
+sha3 = { version = "0.10.8", default-features = false }
+zkvm-interface = { git = "https://github.com/eth-act/zkvm-standards", rev = "282cd356c3a0498416bb0619f9c8a347ce9933fb" }
+# Registers the failing `getrandom` backend a `target_os = "zkvm"` build needs.
+ere-platform-zkvm = { path = "../../crates/platform/zkvm" }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"

@@ -1,0 +1,17 @@
+[package]
+name = "ere-compiler-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tempfile.workspace = true
+thiserror.workspace = true
+
+# Local dependencies
+ere-compiler-core.workspace = true
+ere-util-compile.workspace = true
+
+[lints]
+workspace = true

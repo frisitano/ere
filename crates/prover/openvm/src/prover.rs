@@ -255,12 +255,13 @@ pub(crate) mod tests {
 
     use ere_compiler_core::{Compiler, Elf};
     use ere_compiler_openvm::OpenVMRustRv64imaCustomized;
+    use ere_compiler_sdk::SdkRustRv64ima;
     use ere_prover_core::{Input, ProverResource, codec::Encode, zkVMProver};
     use ere_util_test::{
         codec::BincodeLegacy,
         host::{
             TestCase, run_zkvm_execute, run_zkvm_execute_estimated_cost, run_zkvm_prove,
-            testing_guest_directory,
+            testing_guest_directory, testing_sdk,
         },
         program::{
             basic::BasicProgram,
@@ -410,6 +411,19 @@ pub(crate) mod tests {
     fn test_execute_zkvm_interface() {
         let elf = OpenVMRustRv64imaCustomized
             .compile(testing_guest_directory("openvm", "zkvm_interface"), &[])
+            .unwrap();
+        let zkvm = OpenVMProver::new(elf, ProverResource::Cpu).unwrap();
+
+        for test_case in zkvm_interface::test_cases() {
+            run_zkvm_execute(&zkvm, &test_case);
+        }
+    }
+
+    /// The zkVM-agnostic `zkvm_interface` guest, linked against the openvm SDK.
+    #[test]
+    fn test_execute_zkvm_interface_sdk() {
+        let elf = SdkRustRv64ima::new(testing_sdk("openvm"))
+            .compile(testing_guest_directory("zkvm", "zkvm_interface"), &[])
             .unwrap();
         let zkvm = OpenVMProver::new(elf, ProverResource::Cpu).unwrap();
 

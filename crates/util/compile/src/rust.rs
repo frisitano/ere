@@ -130,6 +130,41 @@ impl CargoBuildCmd {
         manifest_dir: impl AsRef<Path>,
         target: impl Into<RustTarget>,
     ) -> Result<Vec<u8>, CommonError> {
+        let (metadata, target) = self.build(manifest_dir, target)?;
+        let package = metadata.root_package().unwrap();
+        let elf_path = metadata
+            .target_directory
+            .join(target.name())
+            .join(&self.profile)
+            .join(&package.name);
+        let elf =
+            fs::read(&elf_path).map_err(|err| CommonError::read_file("elf", &elf_path, err))?;
+
+        Ok(elf)
+    }
+
+    /// Like [`Self::exec`], for a package whose library target is a `staticlib`: returns the path
+    /// of the built archive.
+    pub fn exec_staticlib(
+        &self,
+        manifest_dir: impl AsRef<Path>,
+        target: impl Into<RustTarget>,
+    ) -> Result<PathBuf, CommonError> {
+        let (metadata, target) = self.build(manifest_dir, target)?;
+        let package = metadata.root_package().unwrap();
+        Ok(metadata
+            .target_directory
+            .join(target.name())
+            .join(&self.profile)
+            .join(format!("lib{}.a", package.name.replace('-', "_")))
+            .into())
+    }
+
+    fn build(
+        &self,
+        manifest_dir: impl AsRef<Path>,
+        target: impl Into<RustTarget>,
+    ) -> Result<(Metadata, RustTarget), CommonError> {
         let metadata = cargo_metadata(manifest_dir.as_ref())?;
         let package = metadata.root_package().unwrap();
 
@@ -209,15 +244,7 @@ impl CargoBuildCmd {
             return Err(CommonError::command_exit_non_zero(&cmd, status, None));
         }
 
-        let elf_path = metadata
-            .target_directory
-            .join(target.name())
-            .join(&self.profile)
-            .join(&package.name);
-        let elf =
-            fs::read(&elf_path).map_err(|err| CommonError::read_file("elf", &elf_path, err))?;
-
-        Ok(elf)
+        Ok((metadata, target))
     }
 }
 

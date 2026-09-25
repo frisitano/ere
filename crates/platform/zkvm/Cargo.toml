@@ -1,0 +1,17 @@
+[package]
+name = "ere-platform-zkvm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Local dependencies
+ere-platform-core.workspace = true
+
+# getrandom 0.2 rejects `target_os = "zkvm"` unless a custom backend is registered.
+[target.'cfg(target_os = "zkvm")'.dependencies]
+getrandom = { version = "0.2", default-features = false, features = ["custom"] }
+
+[lints]
+workspace = true

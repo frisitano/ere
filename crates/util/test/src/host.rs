@@ -19,6 +19,20 @@ pub fn testing_guest_directory(zkvm_name: &str, program: &str) -> PathBuf {
     workspace().join("tests").join(zkvm_name).join(program)
 }
 
+/// Builds the zkVM SDK (`libzkvm.a` and `zkvm.ld`) of `zkvm_name` with `sdk/build.sh` and returns
+/// its directory.
+pub fn testing_sdk(zkvm_name: &str) -> PathBuf {
+    let sdk = workspace().join("sdk");
+    let out = sdk.join("target").join("sdk").join(zkvm_name);
+    let status = std::process::Command::new(sdk.join("build.sh"))
+        .arg(zkvm_name)
+        .arg(&out)
+        .status()
+        .expect("sdk/build.sh should run");
+    assert!(status.success(), "sdk/build.sh {zkvm_name} failed");
+    out
+}
+
 pub fn run_zkvm_execute(zkvm: &impl zkVMProver, test_case: &impl TestCase) -> PublicValues {
     let (public_values, _report) = zkvm
         .execute(&test_case.input())
