@@ -1,0 +1,55 @@
+name: Build zkVM guest object
+description: >
+  Builds a Rust `staticlib` guest crate into a zkVM-agnostic guest object: an archive of LLVM
+  bitcode that defines `main` and leaves only the zkVM guest ABI undefined, ready for the
+  `link-guest` workflow. It uses the nightly and the generic `riscv64ima-unknown-zkvm-elf` target
+  that ere's SDKs are built with, so the bitcode is never newer than the linker.
+
+inputs:
+  crate:
+    description: Directory of the guest crate (library target `crate-type = ["staticlib"]`).
+    required: true
+  features:
+    description: Cargo features to enable, comma-separated.
+    required: false
+    default: ""
+  output:
+    description: Where to write the guest object.
+    required: false
+    default: libguest.a
+
+outputs:
+  path:
+    description: Path of the guest object.
+    value: ${{ inputs.output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned nightly
+      shell: bash
+      # Keep in sync with `sdk/build.sh` (LLVM 22.1.0).
+      run: rustup toolchain install nightly-2026-03-17 --profile minimal --component rust-src
+
+    - name: Build the guest object
+      shell: bash
+      working-directory: ${{ inputs.crate }}
+      env:
+        TARGET: ${{ github.action_path }}/../../../crates/compiler/sdk/src/rust_rv64ima/riscv64ima-unknown-zkvm-elf.json
+        CARGO_TARGET_DIR: ${{ runner.temp }}/guest-object-target
+        RUSTFLAGS: -Clinker-plugin-lto -Cpasses=lower-atomic --cfg getrandom_backend="custom"
+        FEATURES: ${{ inputs.features }}
+        OUTPUT: ${{ inputs.output }}
+      run: |
+        cargo +nightly-2026-03-17 build --release \
+          -Zbuild-std=std,panic_abort -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec \
+          --target "$TARGET" \
+          --config 'profile.release.lto="fat"' --config profile.release.codegen-units=1 \
+          --config 'profile.release.panic="abort"' \
+          ${FEATURES:+--features "$FEATURES"}
+        name=$(cargo +nightly-2026-03-17 metadata --no-deps --format-version 1 |
+          jq -r '.packages[0].name | gsub("-"; "_")')
+        output="$OUTPUT"
+        [[ $output = /* ]] || output="$GITHUB_WORKSPACE/$output"
+        cp "$CARGO_TARGET_DIR/riscv64ima-unknown-zkvm-elf/release/lib$name.a" "$output"
+        ls -l "$output"

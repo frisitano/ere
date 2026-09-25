@@ -13,7 +13,8 @@
 # every `zkvm_*` symbol replaced by the plain RISC-V implementations in `software/`.
 #
 # Usage: build.sh <openvm|zisk|sp1> <out-dir> [software]
-# Requires: nightly Rust with rust-src, LLVM tools matching nightly's LLVM major (LLVM_BIN).
+# Requires: the pinned nightly (RUST_TOOLCHAIN) with rust-src, and LLVM tools no older than its
+# LLVM (LLVM_BIN).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,6 +22,9 @@ zkvm=$1 software=${3:-}
 mkdir -p "$2"
 out=$(cd "$2" && pwd)
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
+# The pinned nightly (LLVM 22.1.0). Guest objects must come from an LLVM no newer than the
+# linker's, so the SDK and the `build-guest-object` action use the same one.
+RUST_TOOLCHAIN=${RUST_TOOLCHAIN:-nightly-2026-03-17}
 export LLVM_BIN CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$here/target}"
 
 # `features`: LLVM target features the zkVM supports beyond RV64IM, which `link.sh` adds to the
@@ -38,7 +42,7 @@ esac
 
 build_staticlib() { # <crate dir> <target spec path> <build-std crates>
     (cd "$here/$1" && RUSTFLAGS='-Clinker-plugin-lto -Cpasses=lower-atomic --cfg getrandom_backend="custom"' \
-        cargo +nightly build --release --locked -Zbuild-std="$3" \
+        cargo "+$RUST_TOOLCHAIN" build --release --locked -Zbuild-std="$3" \
         -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec \
         --target "$2")
 }

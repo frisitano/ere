@@ -17,6 +17,10 @@ const TARGET: RustTarget = RustTarget::SpecJson {
     json: include_str!("./rust_rv64ima/riscv64ima-unknown-zkvm-elf.json"),
 };
 
+/// The nightly `sdk/build.sh` builds SDKs with (LLVM 22.1.0). A guest object must come from an LLVM
+/// no newer than the linker's.
+const TOOLCHAIN: &str = "nightly-2026-03-17";
+
 const RUSTFLAGS: &[&str] = &[
     // Emit LLVM bitcode, so the link optimizes guest and SDK code as one module.
     "-C",
@@ -66,7 +70,7 @@ impl SdkRustRv64ima {
         guest_directory: impl AsRef<Path>,
         args: &[String],
     ) -> Result<PathBuf, Error> {
-        let toolchain = env::var("ERE_RUST_TOOLCHAIN").unwrap_or_else(|_| "nightly".into());
+        let toolchain = env::var("ERE_RUST_TOOLCHAIN").unwrap_or_else(|_| TOOLCHAIN.into());
         let options = parse_cargo_build_options(args)?;
         Ok(CargoBuildCmd::new()
             .toolchain(toolchain)
