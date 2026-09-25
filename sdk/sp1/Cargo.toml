@@ -21,3 +21,13 @@ panic = "abort"
 # hasher resolves to crates.io `sha2` and runs in software inside the runtime.
 [patch.crates-io]
 sha2 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", tag = "patch-sha2-0.10.9-sp1-6.2.0" }
+sp1-lib = { git = "https://github.com/han0110/sp1", rev = "b4f72fe1de5d6d26b3d3f531fcabd137b03e3338" }
+
+# `libzkevm` v6.6.0's `zkvm_bls12_*` and `zkvm_ripemd160` do not follow the zkvm-standards encoding;
+# ere's SP1 test guests pin the same fix. Remove once https://github.com/succinctlabs/sp1/pull/2865
+# is released.
+[patch."https://github.com/succinctlabs/sp1"]
+sp1-lib = { git = "https://github.com/han0110/sp1", rev = "b4f72fe1de5d6d26b3d3f531fcabd137b03e3338" }
+sp1-primitives = { git = "https://github.com/han0110/sp1", rev = "b4f72fe1de5d6d26b3d3f531fcabd137b03e3338" }
+sp1-zkvm = { git = "https://github.com/han0110/sp1", rev = "b4f72fe1de5d6d26b3d3f531fcabd137b03e3338" }
+libzkevm = { git = "https://github.com/han0110/sp1", rev = "b4f72fe1de5d6d26b3d3f531fcabd137b03e3338" }
