@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds one zkVM SDK: a directory holding `libzkvm.a` (the vendor archive, one LLVM bitcode
-# module exporting only the guest ABI in `abi.txt`) and `zkvm.ld` (the vendor linker script,
-# which pulls the archive in with `INPUT(-lzkvm)`).
+# module exporting only the guest ABI in `abi.txt`), `zkvm.ld` (the vendor linker script, which
+# pulls the archive in with `INPUT(-lzkvm)`) and, if the zkVM supports more than RV64IM,
+# `zkvm.features` (the LLVM target features `link.sh` adds to the guest's code).
 #
 # Until zkVM teams publish SDKs, ere builds them from pinned vendor sources, with stock nightly
 # Rust and `-Clinker-plugin-lto`. Each vendor crate is built for its own target spec in
@@ -22,10 +23,16 @@ out=$(cd "$2" && pwd)
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
 export LLVM_BIN CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$here/target}"
 
+# `features`: LLVM target features the zkVM supports beyond RV64IM, which `link.sh` adds to the
+# guest's code at link time (`zkvm.features`). They match what each vendor's own guest builds use:
+# OpenVM's target enables misaligned scalar access; ZisK's carries Zba/Zbb/Zbkb/Zbs and proves
+# misaligned access more cheaply than the byte loads it replaces. SP1's executor rejects misaligned
+# loads and has no bitmanip, so it gets none.
 case $zkvm in
-    openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort ;;
-    zisk) spec=riscv64ima-zisk-zkvm-elf std=core,alloc,panic_abort ;;
-    sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort ;;
+    openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort features=+unaligned-scalar-mem ;;
+    zisk) spec=riscv64ima-zisk-zkvm-elf std=core,alloc,panic_abort
+        features=+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem ;;
+    sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort features= ;;
     *) echo "unknown zkVM: $zkvm" >&2; exit 1 ;;
 esac
 
@@ -64,4 +71,5 @@ fi
     printf '\n'
     cat "$here/linker/$zkvm.ld"
 } >"$out/zkvm.ld"
+if [[ -n $features ]]; then echo "$features" >"$out/zkvm.features"; else rm -f "$out/zkvm.features"; fi
 echo "$out"

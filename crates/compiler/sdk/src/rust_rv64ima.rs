@@ -44,12 +44,13 @@ const CARGO_BUILD_OPTIONS: &[&str] = &[
 ///
 /// The guest package's library target must be a `staticlib` defining `int main(void)`. It is built
 /// with a stock nightly toolchain into a guest object (`lib<name>.a`: one LLVM bitcode module plus
-/// native `compiler_builtins`) whose only undefined symbols are the zkVM guest ABI. The SDK is a
-/// directory holding `libzkvm.a` and `zkvm.ld`; the link is `ld.lld -T <sdk>/zkvm.ld -L <sdk>`,
-/// with full LTO across the guest and the SDK so accelerator calls can inline.
+/// native `compiler_builtins`) whose only undefined symbols are the zkVM guest ABI. It is linked
+/// by ere's `sdk/link.sh`, which checks it against the ABI, adds the ISA extensions the SDK lists
+/// in `zkvm.features`, and runs `ld.lld -T <sdk>/zkvm.ld -L <sdk>` with full LTO across the guest
+/// and the SDK, so accelerator calls can inline.
 ///
-/// `ld.lld` is taken from `ERE_LD_LLD`, or from `PATH`. Its LLVM must be at least as new as the
-/// toolchain's, because bitcode is only read forward.
+/// `ld.lld` is taken from `ERE_LD_LLD`, or from `PATH`, and the LLVM tools from `ERE_LLVM_BIN`.
+/// Their LLVM must be at least as new as the toolchain's, because bitcode is only read forward.
 pub struct SdkRustRv64ima {
     sdk: PathBuf,
 }
@@ -80,15 +81,16 @@ impl SdkRustRv64ima {
     pub fn link(&self, guest_object: impl AsRef<Path>) -> Result<Elf, Error> {
         let tempdir = tempdir().map_err(CommonError::tempdir)?;
         let elf_path = tempdir.path().join("guest.elf");
-        let ld = env::var("ERE_LD_LLD").unwrap_or_else(|_| "ld.lld".into());
-        let mut cmd = Command::new(ld);
-        cmd.arg("-T")
-            .arg(self.sdk.join("zkvm.ld"))
-            .arg("-L")
-            .arg(&self.sdk)
-            .args(["--gc-sections", "--lto-O3", "-o"])
-            .arg(&elf_path)
-            .arg(guest_object.as_ref());
+        // `sdk/link.sh` in this repository: the one link command, shared with CI.
+        let link = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../sdk/link.sh");
+        let mut cmd = Command::new(link);
+        cmd.arg(&self.sdk).arg(guest_object.as_ref()).arg(&elf_path);
+        if let Ok(ld) = env::var("ERE_LD_LLD") {
+            cmd.env("LD_LLD", ld);
+        }
+        if let Ok(llvm_bin) = env::var("ERE_LLVM_BIN") {
+            cmd.env("LLVM_BIN", llvm_bin);
+        }
         let output = cmd
             .output()
             .map_err(|err| CommonError::command(&cmd, err))?;

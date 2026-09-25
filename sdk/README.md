@@ -1,13 +1,14 @@
 # zkVM SDKs
 
 A guest built once, naming no zkVM, gets its runtime and accelerators at link time from a zkVM SDK.
-An SDK is a directory with two files, as in the zkvm-standards "Static Library and Linker Script"
-proposal:
+An SDK is a directory with the two files of the zkvm-standards "Static Library and Linker Script"
+proposal, plus an optional list of ISA extensions:
 
 ```text
 <sdk>/
-├── libzkvm.a   one LLVM bitcode module exporting exactly the guest ABI (`abi.txt`)
-└── zkvm.ld     the vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
+├── libzkvm.a       one LLVM bitcode module exporting exactly the guest ABI (`abi.txt`)
+├── zkvm.ld         the vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
+└── zkvm.features   optional: ISA extensions beyond RV64IM, added to the guest's code at link time
 ```
 
 Until zkVM teams publish SDKs, `build.sh` builds them from pinned vendor sources with stock nightly
@@ -48,7 +49,11 @@ LD_LLD=ld.lld sdk/link.sh <sdk> <guest.a> <guest.elf>
 ```
 
 `link.sh` rejects a guest object that does not define `main`, defines an ABI symbol, or needs a
-symbol outside the ABI. It then runs the one fixed command,
+symbol outside the ABI. The guest object is built for plain RV64IM; if the SDK has a
+`zkvm.features` file, `link.sh` appends its features to every function's `target-features`
+attribute in the guest's bitcode, so the zkVM's extensions are used without a per-zkVM build. (The
+attribute replaces the features `ld.lld` would give code generation, so a `-mattr` at link time
+has no effect.) It then runs the one fixed command,
 `ld.lld -T <sdk>/zkvm.ld -L <sdk> --gc-sections --lto-O3 -o <guest.elf> <guest.a>`. The input order
 is part of it: where both sides carry a weak copy of the same compiler builtin, the order decides
 which copy is linked, and so the ELF bytes and the verification key.
@@ -62,7 +67,10 @@ which copy is linked, and so the ELF bytes and the verification key.
 - SP1's `libzkevm` v6.6.0 does not follow the standard encoding for `zkvm_bls12_*` and
   `zkvm_ripemd160`. The SDK pins the fix ere's SP1 test guests use until
   succinctlabs/sp1#2865 is released.
-- SP1's executor rejects misaligned loads, so the generic guest target does not enable
-  `+unaligned-scalar-mem`, although the zkvm-standards RISC-V target requires `Zicclsm`.
+- `zkvm.features` follows each vendor's own guest builds: OpenVM `+unaligned-scalar-mem`; ZisK
+  `+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem` (misaligned access also lowers its proving cost);
+  SP1 none, because its executor rejects misaligned loads, although the zkvm-standards RISC-V
+  target requires `Zicclsm`. The ELF's RISC-V `arch` attribute still reads RV64IM, since it comes
+  from module metadata, not from the function attributes.
 - The SDKs still export a few symbols outside the ABI that vendor assembly references (`__start`
   on OpenVM and SP1, `ZISK_BUMP_HEAP_POS`/`ZISK_BUMP_HEAP_TOP` on ZisK).

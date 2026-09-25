@@ -4,16 +4,17 @@
 # The guest object is a static archive of LLVM bitcode (plus native compiler builtins) that defines
 # `main`. It must define no symbol of the guest ABI in `abi.txt`, and leave nothing undefined that
 # is not in it; otherwise the link could silently take a guest definition over the vendor's, or
-# depend on one vendor's internals. The link is the one fixed command, so the ELF depends only on
-# the guest object, the SDK and the linker.
+# depend on one vendor's internals. If the SDK has a `zkvm.features` file, its ISA extensions are
+# then added to the guest's code (below). The link is the one fixed command, so the ELF depends
+# only on the guest object, the SDK and the linker.
 #
 # Usage: link.sh <sdk-dir> <guest.a> <out.elf>
 # Requires: `ld.lld` (LD_LLD) with an LLVM at least as new as the guest's and the SDK's bitcode, and
-# `llvm-nm` (LLVM_BIN).
+# `llvm-nm`, `llvm-ar`, `llvm-dis` and `llvm-as` (LLVM_BIN).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-sdk=$1 guest=$2 out=$3
+sdk=$1 guest=$(cd "$(dirname "$2")" && pwd)/$(basename "$2") out=$3
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
 LD_LLD=${LD_LLD:-ld.lld}
 
@@ -32,6 +33,33 @@ fi
 if extra=$(comm -13 <(echo "$abi") <(echo "$undefined")) && [[ -n $extra ]]; then
     echo "$guest: needs symbols outside the guest ABI:" $extra >&2
     exit 1
+fi
+
+# The guest is built for plain RV64IM. The ISA extensions this zkVM supports (`zkvm.features`) are
+# added to the guest's code here, so one guest object serves every zkVM. They go into each
+# function's `target-features` attribute, because that attribute replaces, not extends, the
+# features `ld.lld` would otherwise give code generation. Features are only ever added.
+if [[ -s $sdk/zkvm.features ]]; then
+    features=$(tr -d '[:space:]' <"$sdk/zkvm.features")
+    [[ $features =~ ^(\+[a-z0-9.-]+)(,\+[a-z0-9.-]+)*$ ]] || {
+        echo "$sdk/zkvm.features: expected +feature[,+feature...], got '$features'" >&2
+        exit 1
+    }
+    work=$(mktemp -d "${TMPDIR:-/tmp}/zkvm-link.XXXXXX")
+    trap 'rm -rf "$work"' EXIT
+    members=()
+    while IFS= read -r member; do members+=("$member"); done < <("$LLVM_BIN/llvm-ar" t "$guest")
+    (cd "$work" && "$LLVM_BIN/llvm-ar" x "$guest")
+    for member in "${members[@]}"; do
+        [[ $(head -c 4 "$work/$member" | xxd -p) == 4243c0de ]] || continue
+        "$LLVM_BIN/llvm-dis" "$work/$member" -o - |
+            sed -E -e "s/\"target-features\"=\"\"/\"target-features\"=\"$features\"/g" \
+                -e "s/(\"target-features\"=\"[^\"]+)\"/\1,$features\"/g" |
+            "$LLVM_BIN/llvm-as" -o "$work/$member.tmp"
+        mv "$work/$member.tmp" "$work/$member"
+    done
+    (cd "$work" && "$LLVM_BIN/llvm-ar" rcs guest.a "${members[@]}")
+    guest=$work/guest.a
 fi
 
 "$LD_LLD" -T "$sdk/zkvm.ld" -L "$sdk" --gc-sections --lto-O3 -o "$out" "$guest"
