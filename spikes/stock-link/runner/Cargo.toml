@@ -18,8 +18,8 @@ openvm-sdk-config = { git = "https://github.com/han0110/openvm.git", branch = "p
 openvm-transpiler = { git = "https://github.com/han0110/openvm.git", branch = "patch/v2.1.0-preview", default-features = false, optional = true }
 
 # ZisK, same versions as the ere workspace
-zisk-transpiler-riscv = { version = "1.2.0-alpha", optional = true }
-ziskemu = { version = "1.2.0-alpha", optional = true }
+zisk-transpiler-riscv = { git = "https://github.com/han0110/zisk.git", branch = "patch/v1.3.0-alpha", optional = true }
+ziskemu = { git = "https://github.com/han0110/zisk.git", branch = "patch/v1.3.0-alpha", optional = true }
 
 # SP1, same tag as the ere workspace
 sp1-core-executor = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", optional = true }
