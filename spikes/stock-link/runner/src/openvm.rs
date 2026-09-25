@@ -2,7 +2,7 @@
 
 use ere_verifier_openvm::NUM_PUBLIC_VALUES_BYTES;
 use openvm_circuit::{
-    arch::{ExecutionOutcome, VmExecutor, instructions::exe::VmExe},
+    arch::{ExecutionOutcome, VmExecutor, VmState, instructions::exe::VmExe},
     system::memory::merkle::public_values::extract_public_values,
 };
 use openvm_sdk::{F, StdIn};
@@ -11,8 +11,9 @@ use openvm_transpiler::{FromElf, elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::Execution;
 
-/// Instructions run per interpreter call before the state is checked for termination.
-const CHUNK: u64 = 4096;
+/// Instructions run per interpreter call before the state is checked for termination. Each chunk
+/// clones the VM state once, so this is large.
+const CHUNK: u64 = 1 << 22;
 
 pub(crate) fn execute(elf: &[u8], input: &[u8]) -> Execution {
     let mut config = SdkVmConfig::standard();
@@ -28,27 +29,35 @@ pub(crate) fn execute(elf: &[u8], input: &[u8]) -> Execution {
     let mut stdin = StdIn::default();
     stdin.write_bytes(input);
 
-    // Run in chunks, then replay the last chunk one instruction at a time for an exact count.
+    // Run in chunks from a saved state; once a chunk terminates, binary-search the exact number of
+    // instructions it ran by replaying it from the saved state.
     let mut instructions = 0;
-    let mut last = None;
-    let mut outcome = instance.execute_for(stdin.clone(), CHUNK).expect("execute");
-    while let ExecutionOutcome::Suspended(state) = outcome {
-        instructions += CHUNK;
-        last = Some(state.clone());
-        outcome = instance.execute_from_state_for(state, CHUNK).expect("execute");
-    }
-    let step = |state| instance.execute_from_state_for(state, 1).expect("execute");
-    let mut outcome = match last {
-        Some(state) => step(state),
-        None => instance.execute_for(stdin, 1).expect("execute"),
-    };
-    instructions += 1;
+    let mut saved = VmState::initial(
+        executor.config.as_ref(),
+        &exe.init_memory,
+        exe.pc_start,
+        stdin,
+    );
     let state = loop {
-        match outcome {
-            ExecutionOutcome::Suspended(state) => outcome = step(state),
-            ExecutionOutcome::Terminated(state) => break state,
+        match instance.execute_from_state_for(saved.clone(), CHUNK).expect("execute") {
+            ExecutionOutcome::Suspended(state) => {
+                instructions += CHUNK;
+                saved = state;
+            }
+            ExecutionOutcome::Terminated(state) => {
+                // Smallest `n` for which the chunk terminates within `n` instructions.
+                let (mut low, mut high) = (1, CHUNK);
+                while low < high {
+                    let mid = low + (high - low) / 2;
+                    match instance.execute_from_state_for(saved.clone(), mid).expect("execute") {
+                        ExecutionOutcome::Terminated(_) => high = mid,
+                        ExecutionOutcome::Suspended(_) => low = mid + 1,
+                    }
+                }
+                instructions += low;
+                break state;
+            }
         }
-        instructions += 1;
     };
 
     Execution {
