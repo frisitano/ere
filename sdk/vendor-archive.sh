@@ -26,8 +26,6 @@ cd "$work"
 
 bitcode=() native=()
 for member in *; do
-    # DROP is a glob of native members to leave out of the SDK, see `build.sh`.
-    [[ -n ${DROP:-} && $member == $DROP ]] && continue
     if [[ $(head -c 4 "$member" | xxd -p) == 4243c0de ]]; then bitcode+=("$member"); else native+=("$member"); fi
 done
 

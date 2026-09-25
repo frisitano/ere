@@ -23,10 +23,7 @@ LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
 export LLVM_BIN CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$here/target}"
 
 case $zkvm in
-    # OpenVM's `openvm_mem` (memcpy and friends) fails on the OpenVM executor ere pins: execution
-    # stops at a register whose upper 32 bits are set. ere's own OpenVM compilers take these from
-    # `compiler_builtins` as well, so leave it out.
-    openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort; export DROP='openvm_mem-*' ;;
+    openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort ;;
     zisk) spec=riscv64ima-zisk-zkvm-elf std=core,alloc,panic_abort ;;
     sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort ;;
     *) echo "unknown zkVM: $zkvm" >&2; exit 1 ;;
