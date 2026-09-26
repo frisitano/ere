@@ -15,10 +15,12 @@
 #         name: stateless-validator-ethrex
 #         ere-ref: <ref>                 # the same ref as in `uses:`
 #         test-stateless-validator: ethrex
+#         lto-args: '{"zisk": "--inline-threshold=4749 --unroll-threshold=378"}'
 #         package: true
 #
 # Per zkVM it builds the SDK from pinned vendor sources (`sdk/build.sh`), links with `sdk/link.sh`
-# (ABI check, the SDK's ISA extensions, `ld.lld` with full LTO), runs ere-guests' `zkvm_execution`
+# (ABI check, the SDK's ISA extensions and LTO plugin, the guest's `lto-args`, `ld.lld` with full
+# LTO), runs ere-guests' `zkvm_execution`
 # test on the ELF, and generates the program VK with Ere's server image.
 name: Link guest
 
@@ -37,6 +39,12 @@ on:
         description: JSON array of the zkVMs to link for.
         type: string
         default: '["openvm", "sp1", "zisk"]'
+      lto-args:
+        description: >
+          JSON object mapping a zkVM to space-separated LLVM options for this guest on it (tuning
+          such as `--inline-threshold=4749`), passed to the link as `-mllvm`.
+        type: string
+        default: "{}"
       ere-repository:
         description: Repository of this workflow, for `sdk/`.
         type: string
@@ -98,7 +106,8 @@ jobs:
       - name: Install LLVM 22
         run: |
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
-          sudo apt-get install -y lld-22 xxd
+          # llvm-22-dev: headers and CMake package for building an SDK's LLVM pass plugin.
+          sudo apt-get install -y lld-22 llvm-22-dev xxd
           "$LD_LLD" --version
 
       - name: Install the pinned nightly
@@ -112,7 +121,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             ere/sdk/target
-          key: sdk-${{ matrix.zkvm }}-${{ hashFiles('ere/sdk/**/Cargo.lock', 'ere/sdk/*.sh', 'ere/sdk/targets/*', 'ere/sdk/linker/*') }}
+          key: sdk-${{ matrix.zkvm }}-${{ hashFiles('ere/sdk/**/Cargo.lock', 'ere/sdk/*.sh', 'ere/sdk/targets/*', 'ere/sdk/linker/*', 'ere/sdk/plugins/**') }}
 
       - name: Build the SDK
         run: ere/sdk/build.sh ${{ matrix.zkvm }} sdk
@@ -124,6 +133,8 @@ jobs:
           path: guest-object
 
       - name: Link
+        env:
+          LTO_ARGS: ${{ fromJson(inputs.lto-args)[matrix.zkvm] }}
         run: |
           objects=(guest-object/*.a)
           [[ ${#objects[@]} == 1 && -f ${objects[0]} ]] || {
@@ -131,7 +142,9 @@ jobs:
             exit 1
           }
           mkdir -p out
-          ere/sdk/link.sh sdk "${objects[0]}" "out/${{ inputs.name }}-${{ matrix.zkvm }}.elf"
+          read -ra lto_args <<<"$LTO_ARGS"
+          ere/sdk/link.sh sdk "${objects[0]}" "out/${{ inputs.name }}-${{ matrix.zkvm }}.elf" \
+            ${lto_args[@]+"${lto_args[@]}"}
           ls -l out
 
       - name: Upload the ELF

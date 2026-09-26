@@ -8,13 +8,22 @@
 # then added to the guest's code (below). The link is the one fixed command, so the ELF depends
 # only on the guest object, the SDK and the linker.
 #
-# Usage: link.sh <sdk-dir> <guest.a> <out.elf>
+# If the SDK carries an LLVM pass plugin (`zkvm-lto-plugin.so`, built for the linker's LLVM), the
+# link loads it into the LTO pipeline. Arguments after the output are LLVM options for this guest on
+# this zkVM (the guest team's tuning, e.g. `--inline-threshold=4749`), passed as `-mllvm`; they are
+# part of the link command, so the ELF depends on them too.
+#
+# Usage: link.sh <sdk-dir> <guest.a> <out.elf> [llvm-option...]
 # Requires: `ld.lld` (LD_LLD) with an LLVM at least as new as the guest's and the SDK's bitcode, and
 # `llvm-nm`, `llvm-ar`, `llvm-dis` and `llvm-as` (LLVM_BIN).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 sdk=$1 guest=$(cd "$(dirname "$2")" && pwd)/$(basename "$2") out=$3
+shift 3
+lto_args=()
+for arg in "$@"; do lto_args+=(-mllvm "$arg"); done
+[[ -f $sdk/zkvm-lto-plugin.so ]] && lto_args+=("--load-pass-plugin=$sdk/zkvm-lto-plugin.so")
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
 LD_LLD=${LD_LLD:-ld.lld}
 
@@ -62,5 +71,5 @@ if [[ -s $sdk/zkvm.features ]]; then
     guest=$work/guest.a
 fi
 
-"$LD_LLD" -T "$sdk/zkvm.ld" -L "$sdk" --gc-sections --lto-O3 -o "$out" "$guest"
+"$LD_LLD" -T "$sdk/zkvm.ld" -L "$sdk" --gc-sections --lto-O3 ${lto_args[@]+"${lto_args[@]}"} -o "$out" "$guest"
 echo "$out"

@@ -2,7 +2,8 @@
 # Builds one zkVM SDK: a directory holding `libzkvm.a` (the vendor archive, one LLVM bitcode
 # module exporting only the guest ABI in `abi.txt`), `zkvm.ld` (the vendor linker script, which
 # pulls the archive in with `INPUT(-lzkvm)`) and, if the zkVM supports more than RV64IM,
-# `zkvm.features` (the LLVM target features `link.sh` adds to the guest's code).
+# `zkvm.features` (the LLVM target features `link.sh` adds to the guest's code), and optionally
+# `zkvm-lto-plugin.so` (an LLVM pass plugin `link.sh` runs at the end of LTO).
 #
 # Until zkVM teams publish SDKs, ere builds them from pinned vendor sources, with stock nightly
 # Rust and `-Clinker-plugin-lto`. Each vendor crate is built for its own target spec in
@@ -35,7 +36,7 @@ export LLVM_BIN CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$here/target}"
 case $zkvm in
     openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort features=+unaligned-scalar-mem ;;
     zisk) spec=riscv64ima-zisk-zkvm-elf std=core,alloc,panic_abort
-        features=+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem ;;
+        features=+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem plugin=zisk-dma ;;
     sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort features= ;;
     *) echo "unknown zkVM: $zkvm" >&2; exit 1 ;;
 esac
@@ -76,4 +77,16 @@ fi
     cat "$here/linker/$zkvm.ld"
 } >"$out/zkvm.ld"
 if [[ -n $features ]]; then echo "$features" >"$out/zkvm.features"; else rm -f "$out/zkvm.features"; fi
+
+# The zkVM's LLVM pass plugin (`plugins/`), run by `link.sh` at the end of LTO. It is native code for
+# this machine and must be built against the LLVM of the `ld.lld` that loads it.
+if [[ -n ${plugin:-} ]]; then
+    cmake -S "$here/plugins/$plugin" -B "$CARGO_TARGET_DIR/plugin-$plugin" -DCMAKE_BUILD_TYPE=Release \
+        -DLLVM_DIR="$LLVM_BIN/../lib/cmake/llvm" -DCMAKE_C_COMPILER="$LLVM_BIN/clang" \
+        -DCMAKE_CXX_COMPILER="$LLVM_BIN/clang++" >/dev/null
+    cmake --build "$CARGO_TARGET_DIR/plugin-$plugin" >/dev/null
+    cp "$CARGO_TARGET_DIR/plugin-$plugin/zkvm-lto-plugin.so" "$out/"
+else
+    rm -f "$out/zkvm-lto-plugin.so"
+fi
 echo "$out"

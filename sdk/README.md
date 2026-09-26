@@ -8,7 +8,8 @@ proposal, plus an optional list of ISA extensions:
 <sdk>/
 ├── libzkvm.a       one LLVM bitcode module exporting exactly the guest ABI (`abi.txt`)
 ├── zkvm.ld         the vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
-└── zkvm.features   optional: ISA extensions beyond RV64IM, added to the guest's code at link time
+├── zkvm.features   optional: ISA extensions beyond RV64IM, added to the guest's code at link time
+└── zkvm-lto-plugin.so  optional: LLVM pass plugin run at the end of LTO (native, per host)
 ```
 
 Until zkVM teams publish SDKs, `build.sh` builds them from pinned vendor sources with stock nightly
@@ -45,8 +46,12 @@ The guest is a `staticlib` defining `int main(void)`, built for the generic
 `ere-compiler-sdk`'s `SdkRustRv64ima` does both steps; for a prebuilt guest object:
 
 ```bash
-LD_LLD=ld.lld sdk/link.sh <sdk> <guest.a> <guest.elf>
+LD_LLD=ld.lld sdk/link.sh <sdk> <guest.a> <guest.elf> [llvm-option...]
 ```
+
+Options after the output are LLVM options for this guest on this zkVM, passed as `-mllvm`: tuning
+that belongs to the guest team, such as the Optuna-tuned set ere's ZisK compiler uses for ethrex
+(`ERE_PROFILE=ethrex`, starting `--inline-threshold=4749`). They become part of the link command.
 
 `link.sh` rejects a guest object that does not define `main`, defines an ABI symbol, or needs a
 symbol outside the ABI. The guest object is built for plain RV64IM; if the SDK has a
@@ -72,5 +77,11 @@ which copy is linked, and so the ELF bytes and the verification key.
   SP1 none, because its executor rejects misaligned loads, although the zkvm-standards RISC-V
   target requires `Zicclsm`. The ELF's RISC-V `arch` attribute still reads RV64IM, since it comes
   from module metadata, not from the function attributes.
+- The ZisK SDK carries `plugins/zisk-dma`, an LLVM pass plugin that lowers small constant-size
+  `memcpy`, `memset` and `memcmp`/`bcmp` (16 to 2047 bytes) at the end of LTO to the inline DMA
+  patterns ZisK's transpiler fuses into one `dma_xmem*` operation, as ZisK's own compiler emits them.
+  Stock LLVM expands such copies into loads and stores, so the SDK's DMA `memcpy` never sees them.
+  On one ethrex block this saves 58k of 714k steps. `build.sh` compiles it with `cmake` against
+  `LLVM_BIN`'s LLVM, which must be the LLVM of the `ld.lld` that loads it.
 - The SDKs still export a few symbols outside the ABI that vendor assembly references (`__start`
   on OpenVM and SP1, `ZISK_BUMP_HEAP_POS`/`ZISK_BUMP_HEAP_TOP` on ZisK).
