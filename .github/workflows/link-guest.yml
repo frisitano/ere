@@ -91,6 +91,9 @@ jobs:
   link:
     name: Link ${{ matrix.zkvm }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -124,7 +127,14 @@ jobs:
           key: sdk-${{ matrix.zkvm }}-${{ hashFiles('ere/sdk/**/Cargo.lock', 'ere/sdk/*.sh', 'ere/sdk/targets/*', 'ere/sdk/linker/*', 'ere/sdk/plugins/**') }}
 
       - name: Build the SDK
-        run: ere/sdk/build.sh ${{ matrix.zkvm }} sdk
+        run: |
+          # On failure, repeat the first errors as annotations, so they show in the run summary.
+          if ! ere/sdk/build.sh ${{ matrix.zkvm }} sdk 2>&1 | tee sdk-build.log; then
+            grep -m 3 -E -A 12 '^(error|Error)|error:' sdk-build.log | cut -c 1-300 | head -60 |
+              awk '{printf "%s%%0A", $0}' | sed 's/^/::error title=SDK build (${{ matrix.zkvm }})::/'
+            echo
+            exit 1
+          fi
 
       - name: Download the guest object
         uses: actions/download-artifact@v4
