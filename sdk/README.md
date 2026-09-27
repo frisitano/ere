@@ -38,6 +38,16 @@ RISC-V implementations in `software/` (`revm-precompile`'s pure-Rust backends). 
 against it computes the same results with no acceleration, which is the baseline for the
 acceleration check.
 
+## Published SDKs
+
+Guest CI does not build SDKs. Pushing a tag `sdk-*` runs `.github/workflows/release-sdk.yml`, which
+builds the three SDKs (in a clean Ubuntu 24.04 container with LLVM 22 only) and publishes, as
+release assets, `sdk-<zkvm>.tar.gz`, `ere-link-tools.tar.gz` (`link.sh`, `abi.txt`, the generic
+guest target spec and `rust-toolchain`, the pinned nightly) and `SHA256SUMS`. ere-guests' reusable
+`link-guest` workflow and `build-guest-object` action take a release tag and use these assets, so
+one release pins the vendor runtimes, the link tools and the guest toolchain together. The ZisK
+plugin in the release is built for Linux x86_64 against LLVM 22.
+
 ## Build and link a guest
 
 The guest is a `staticlib` defining `int main(void)`, built for the generic
