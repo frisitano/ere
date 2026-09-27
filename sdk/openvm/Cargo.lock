@@ -883,6 +883,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-bigint-guest"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/openvm.git?tag=v2.1.0-preview#538c5488130da56c8442d33445efe3c1fe5ea8b8"
+dependencies = [
+ "openvm-platform",
+ "strum_macros",
+]
+
+[[package]]
 name = "openvm-curve-utils"
 version = "0.4.0"
 source = "git+https://github.com/han0110/openvm-eth?branch=patch%2Fv2.1.0-preview#2ed8f057bf5dbc53bc75149af45010ec2327ff48"
@@ -1556,6 +1565,7 @@ version = "0.1.0"
 dependencies = [
  "ere-platform-openvm",
  "openvm",
+ "openvm-bigint-guest",
  "openvm-platform",
  "openvm-riscv-guest",
  "ruint",

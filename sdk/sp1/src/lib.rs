@@ -32,5 +32,41 @@ unsafe extern "C" fn sys_argv(
     0
 }
 
-#[path = "../../shims/u256_mulmod.rs"]
-mod u256_mulmod;
+#[path = "../../shims/u256.rs"]
+mod u256;
+
+/// `zkvm_u256_*`: multiplication, modular multiplication and exponentiation on SP1's
+/// `UINT256_MUL` precompile, which computes `x * y mod m` with a zero `m` meaning 2^256; the rest
+/// in software.
+mod u256_ops {
+    pub use super::u256::sw::{add_mod, div, rem};
+    use super::u256::{Limbs, pow_with};
+
+    unsafe extern "C" {
+        // `x = x * y mod m`, with `m` stored right after `y`; both pointers 8-byte aligned.
+        fn syscall_uint256_mulmod(x: *mut Limbs, y: *const Limbs);
+    }
+
+    fn uint256_mul(a: &Limbs, b: &Limbs, m: &Limbs) -> Limbs {
+        let mut x = *a;
+        let y_and_m = [*b, *m];
+        unsafe { syscall_uint256_mulmod(&mut x, y_and_m.as_ptr()) };
+        x
+    }
+
+    pub fn mul(a: &Limbs, b: &Limbs) -> Limbs {
+        uint256_mul(a, b, &[0; 4])
+    }
+
+    pub fn mul_mod(a: &Limbs, b: &Limbs, n: &Limbs) -> Limbs {
+        if *n == [0; 4] {
+            [0; 4]
+        } else {
+            uint256_mul(a, b, n)
+        }
+    }
+
+    pub fn pow(base: &Limbs, exponent: &Limbs) -> Limbs {
+        pow_with(mul, base, exponent)
+    }
+}

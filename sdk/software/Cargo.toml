@@ -9,7 +9,7 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
-# `zkvm_u256_mulmod` in software (`../shims/u256_mulmod.rs`).
+# The `zkvm_u256_*` software reference (`../shims/u256.rs`).
 ruint = { version = "1.20.1", default-features = false }
 # Pure-Rust backends only: no `secp256k1`, `blst` or `c-kzg`, which need a C cross compiler.
 revm-precompile = { version = "42.0.1", default-features = false, features = ["std"] }

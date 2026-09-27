@@ -21,6 +21,7 @@ Rust.
 ```bash
 sdk/build.sh <openvm|zisk|sp1> <out-dir>            # the SDK
 sdk/build.sh <openvm|zisk|sp1> <out-dir> software   # its negative control
+sdk/build.sh <openvm|zisk|sp1> <out-dir> 'software=zkvm_u256_*,zkvm_keccak256'   # selected ones
 ```
 
 Requirements: nightly Rust with `rust-src`, and LLVM tools no older than nightly's LLVM
@@ -41,7 +42,28 @@ allocation. Across the ABI, as inside a vendor's own guest, the link's LTO decid
 The `software` control keeps the vendor's runtime and replaces every `zkvm_*` symbol with the plain
 RISC-V implementations in `software/` (`revm-precompile`'s pure-Rust backends). A guest linked
 against it computes the same results with no acceleration, which is the baseline for the
-acceleration check.
+acceleration check. `software=<pattern>,...` replaces only the accelerators matching a pattern (a
+symbol, or a prefix ending in `*`), and the SDK lists them in `zkvm.software`. The guest object is
+the same in every case, so one link per configuration measures what each accelerator is worth.
+
+## 256-bit arithmetic
+
+`zkvm_u256_mul`, `_div`, `_mod`, `_addmod`, `_mulmod` and `_exp` compute the EVM opcodes of those
+names: wrapping modulo 2^256, and zero for a zero divisor or modulus. Their operands are
+`uint64_t[4]` in little-endian limb order, 8-byte aligned, which is how EVM implementations hold
+their stack words and how every zkVM's 256-bit precompile reads its operands, so a guest passes
+pointers to its stack slots and nothing is converted. `result` may alias an input. The names follow
+the zkvm-standards U256 draft (`zkvm_u256.h`), whose operands are big-endian bytes instead.
+`shims/u256.rs` holds the exports, a software reference on `ruint`, and a square-and-multiply
+`exp` on a zkVM's multiplication:
+
+| Function | OpenVM | SP1 | ZisK |
+| --- | --- | --- | --- |
+| `mul` | Int256 `MUL` | `UINT256_MUL` (modulus 0) | `arith256` |
+| `div`, `mod` | software | software | `arith256` (hinted, verified) |
+| `addmod` | software | software | `arith256_mod` |
+| `mulmod` | software | `UINT256_MUL` | `arith256_mod` |
+| `exp` | on Int256 `MUL` | on `UINT256_MUL` | `ziskos` `wrapping_pow256` |
 
 ## Published SDKs
 

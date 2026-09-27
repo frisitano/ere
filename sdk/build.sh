@@ -11,9 +11,12 @@
 # accelerated paths.
 #
 # With `software`, the SDK is the acceleration check's negative control: the vendor's runtime with
-# every `zkvm_*` symbol replaced by the plain RISC-V implementations in `software/`.
+# every `zkvm_*` symbol replaced by the plain RISC-V implementations in `software/`. With
+# `software=<pattern>[,<pattern>...]`, only the accelerators matching a pattern (a symbol name, or a
+# prefix ending in `*`, e.g. `zkvm_u256_*`) are replaced, to measure what each one is worth. The
+# guest object is the same either way; `zkvm.software` in the SDK lists what was replaced.
 #
-# Usage: build.sh <openvm|zisk|sp1> <out-dir> [software]
+# Usage: build.sh <openvm|zisk|sp1> <out-dir> [software[=<pattern>,...]]
 # Requires: the pinned nightly (RUST_TOOLCHAIN) with rust-src, and LLVM tools no older than its
 # LLVM (LLVM_BIN).
 set -euo pipefail
@@ -56,17 +59,28 @@ build_staticlib() { # <crate dir> <target spec path> <build-std crates> [target 
 # The vendor's own code gets the same features as the guest's, as in the vendor's own builds.
 build_staticlib "$zkvm" "$here/targets/$spec.json" "$std" "$features"
 input='INPUT(-lzkvm)'
-if [[ $software == software ]]; then
+rm -f "$out/libzkvm_software.a" "$out/zkvm.software"
+if [[ $software == software || $software == software=* ]]; then
+    patterns=${software#software}
+    patterns=${patterns#=}
+    regex='^zkvm_'
+    if [[ -n $patterns ]]; then
+        regex=$(tr ',' '\n' <<<"$patterns" | sed -e 's/[.]/\\./g' -e 's/[*]$/.*/' -e 's/^/^/' -e 's/$/$/' |
+            paste -sd'|' -)
+    fi
+    grep -E "$regex" "$here/abi.txt" | grep '^zkvm_' >"$out/zkvm.software" || {
+        echo "software=$patterns matches no accelerator in abi.txt" >&2
+        exit 1
+    }
+    grep -vxF -f "$out/zkvm.software" "$here/abi.txt" >"$out/vendor.txt"
     # The generic guest target, as `ere-compiler-sdk` builds guests for it.
     build_staticlib software "$here/../crates/compiler/sdk/src/rust_rv64ima/riscv64ima-unknown-zkvm-elf.json" \
         std,panic_abort
-    grep '^zkvm_' "$here/abi.txt" >"$out/accelerators.txt"
-    grep -v '^zkvm_' "$here/abi.txt" >"$out/runtime.txt"
     "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/riscv64ima-unknown-zkvm-elf/release/libzkvm_software.a" \
-        "$out/libzkvm_software.a" "$out/accelerators.txt"
+        "$out/libzkvm_software.a" "$out/zkvm.software"
     "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/$spec/release/libzkvm_$zkvm.a" "$out/libzkvm.a" \
-        "$out/runtime.txt"
-    rm "$out/accelerators.txt" "$out/runtime.txt"
+        "$out/vendor.txt"
+    rm "$out/vendor.txt"
     input='INPUT(-lzkvm -lzkvm_software)'
 else
     "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/$spec/release/libzkvm_$zkvm.a" "$out/libzkvm.a"

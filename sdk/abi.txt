@@ -32,3 +32,8 @@ zkvm_bls12_map_fp_to_g1
 zkvm_bls12_map_fp2_to_g2
 zkvm_secp256r1_verify
 zkvm_u256_mulmod
+zkvm_u256_mul
+zkvm_u256_div
+zkvm_u256_mod
+zkvm_u256_addmod
+zkvm_u256_exp

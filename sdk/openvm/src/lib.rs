@@ -126,5 +126,37 @@ unsafe extern "C" fn sys_argv(
     0
 }
 
-#[path = "../../shims/u256_mulmod.rs"]
-mod u256_mulmod;
+#[path = "../../shims/u256.rs"]
+mod u256;
+
+/// `zkvm_u256_*`: multiplication, and exponentiation built on it, with OpenVM's Int256 extension;
+/// OpenVM has no 256-bit division or modular operation with a runtime modulus, so the rest run in
+/// software.
+mod u256_ops {
+    // Links `openvm-bigint-guest`, which defines the hook below, into the archive.
+    use openvm_bigint_guest as _;
+
+    pub use super::u256::sw::{add_mod, div, mul_mod, rem};
+    use super::u256::{Limbs, pow_with};
+
+    unsafe extern "C" {
+        // `openvm-bigint-guest`'s hook for the Int256 `MUL` instruction, over little-endian bytes.
+        fn zkvm_u256_wrapping_mul_impl(result: *mut u8, a: *const u8, b: *const u8);
+    }
+
+    pub fn mul(a: &Limbs, b: &Limbs) -> Limbs {
+        let mut result = [0; 4];
+        unsafe {
+            zkvm_u256_wrapping_mul_impl(
+                result.as_mut_ptr().cast(),
+                a.as_ptr().cast(),
+                b.as_ptr().cast(),
+            )
+        };
+        result
+    }
+
+    pub fn pow(base: &Limbs, exponent: &Limbs) -> Limbs {
+        pow_with(mul, base, exponent)
+    }
+}

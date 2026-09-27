@@ -321,5 +321,10 @@ unsafe extern "C" fn zkvm_secp256r1_verify(
     OK
 }
 
-#[path = "../../shims/u256_mulmod.rs"]
-mod u256_mulmod;
+#[path = "../../shims/u256.rs"]
+mod u256;
+
+/// Every `zkvm_u256_*` in software.
+mod u256_ops {
+    pub use super::u256::sw::*;
+}

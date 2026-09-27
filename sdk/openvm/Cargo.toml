@@ -9,8 +9,10 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
-# `zkvm_u256_mulmod` in software (`../shims/u256_mulmod.rs`).
+# The `zkvm_u256_*` software reference (`../shims/u256.rs`).
 ruint = { version = "1.20.1", default-features = false }
+# The Int256 extension's `zkvm_u256_wrapping_mul_impl`, for `zkvm_u256_mul` and `zkvm_u256_exp`.
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview", features = ["export-intrinsics"] }
 ere-platform-openvm = { path = "../../crates/platform/openvm", default-features = false, features = ["getrandom-unsupported", "zkvm-accelerator"] }
 openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview", default-features = false }
 openvm-platform = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview" }
