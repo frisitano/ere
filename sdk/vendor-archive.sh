@@ -48,9 +48,15 @@ done
 "$LLVM_BIN/llvm-nm" --defined-only merged.bc | awk '{print $NF}' | sort -u > defined.txt
 public=$( (cat "$exports"; comm -12 undefined.txt defined.txt) | sort -u | paste -sd, -)
 
+# Vendors mark some ABI functions `#[inline(never)]` (ZisK's `sys_alloc_aligned`, which every
+# allocation calls), a choice made for their own non-LTO builds. At this boundary the guest link's
+# LTO decides, as it would inside a vendor's own guest, so drop `noinline` from every ABI export.
+uninline=()
+while read -r symbol; do uninline+=("-force-remove-attribute=$symbol:noinline"); done < "$exports"
+
 "$LLVM_BIN/opt" merged.bc -o vendor.bc \
-    -passes='internalize,globaldce' $([[ $lto == thin ]] && echo --thinlto-bc) \
-    -internalize-public-api-list="$public"
+    -passes='forceattrs,internalize,globaldce' $([[ $lto == thin ]] && echo --thinlto-bc) \
+    "${uninline[@]}" -internalize-public-api-list="$public"
 
 rm -f "$output"
 "$LLVM_BIN/llvm-ar" rcs "$output" vendor.bc "${native[@]}"

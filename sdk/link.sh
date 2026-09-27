@@ -9,9 +9,11 @@
 # only on the guest object, the SDK and the linker.
 #
 # If the SDK carries an LLVM pass plugin (`zkvm-lto-plugin.so`, built for the linker's LLVM), the
-# link loads it into the LTO pipeline. Arguments after the output are LLVM options for this guest on
-# this zkVM (the guest team's tuning, e.g. `--inline-threshold=4749`), passed as `-mllvm`; they are
-# part of the link command, so the ELF depends on them too.
+# link loads it into the LTO pipeline. LLVM options come from two places, both passed as `-mllvm`:
+# the SDK's `zkvm.llvm-args` (one per line, the vendor's options for every guest, e.g. SP1's
+# scheduling direction), then the arguments after the output (this guest's tuning on this zkVM, e.g.
+# `--inline-threshold=4749`), so a guest option can override a vendor one. Both are part of the
+# link command, so the ELF depends on them too.
 #
 # Usage: link.sh <sdk-dir> <guest.a> <out.elf> [llvm-option...]
 # Requires: `ld.lld` (LD_LLD) with an LLVM at least as new as the guest's and the SDK's bitcode, and
@@ -22,6 +24,9 @@ here=$(cd "$(dirname "$0")" && pwd)
 sdk=$1 guest=$(cd "$(dirname "$2")" && pwd)/$(basename "$2") out=$3
 shift 3
 lto_args=()
+if [[ -f $sdk/zkvm.llvm-args ]]; then
+    while read -r arg; do [[ -n $arg ]] && lto_args+=(-mllvm "$arg"); done <"$sdk/zkvm.llvm-args"
+fi
 for arg in "$@"; do lto_args+=(-mllvm "$arg"); done
 [[ -f $sdk/zkvm-lto-plugin.so ]] && lto_args+=("--load-pass-plugin=$sdk/zkvm-lto-plugin.so")
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}

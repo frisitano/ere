@@ -28,6 +28,9 @@ LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
 RUST_TOOLCHAIN=${RUST_TOOLCHAIN:-nightly-2026-03-17}
 export LLVM_BIN CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$here/target}"
 
+# `llvm_args`: LLVM options the vendor's own build passes for every guest, which `link.sh` passes to
+# the link (`zkvm.llvm-args`). Guest-specific tuning is not here but in the link's own arguments.
+#
 # `features`: LLVM target features the zkVM supports beyond RV64IM, which `link.sh` adds to the
 # guest's code at link time (`zkvm.features`). They match what each vendor's own guest builds use:
 # OpenVM's target enables misaligned scalar access; ZisK's carries Zba/Zbb/Zbkb/Zbs and proves
@@ -37,18 +40,21 @@ case $zkvm in
     openvm) spec=riscv64ima-openvm-elf std=core,alloc,panic_abort features=+unaligned-scalar-mem ;;
     zisk) spec=riscv64ima-zisk-zkvm-elf std=core,alloc,panic_abort
         features=+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem plugin=zisk-dma ;;
-    sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort features= ;;
+    sp1) spec=riscv64ima-succinct-zkvm-elf std=std,panic_abort features=
+        # `cargo prove build` compiles every SP1 guest with these.
+        llvm_args=(-misched-prera-direction=bottomup -misched-postra-direction=bottomup) ;;
     *) echo "unknown zkVM: $zkvm" >&2; exit 1 ;;
 esac
 
-build_staticlib() { # <crate dir> <target spec path> <build-std crates>
-    (cd "$here/$1" && RUSTFLAGS='-Clinker-plugin-lto -Cpasses=lower-atomic --cfg getrandom_backend="custom"' \
+build_staticlib() { # <crate dir> <target spec path> <build-std crates> [target features]
+    (cd "$here/$1" && RUSTFLAGS="-Clinker-plugin-lto -Cpasses=lower-atomic --cfg getrandom_backend=\"custom\"${4:+ -Ctarget-feature=$4}" \
         cargo "+$RUST_TOOLCHAIN" build --release --locked -Zbuild-std="$3" \
         -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec \
         --target "$2")
 }
 
-build_staticlib "$zkvm" "$here/targets/$spec.json" "$std"
+# The vendor's own code gets the same features as the guest's, as in the vendor's own builds.
+build_staticlib "$zkvm" "$here/targets/$spec.json" "$std" "$features"
 input='INPUT(-lzkvm)'
 if [[ $software == software ]]; then
     # The generic guest target, as `ere-compiler-sdk` builds guests for it.
@@ -77,6 +83,7 @@ fi
     cat "$here/linker/$zkvm.ld"
 } >"$out/zkvm.ld"
 if [[ -n $features ]]; then echo "$features" >"$out/zkvm.features"; else rm -f "$out/zkvm.features"; fi
+if [[ -n ${llvm_args[*]:-} ]]; then printf '%s\n' "${llvm_args[@]}" >"$out/zkvm.llvm-args"; else rm -f "$out/zkvm.llvm-args"; fi
 
 # The zkVM's LLVM pass plugin (`plugins/`), run by `link.sh` at the end of LTO. It is native code for
 # this machine and must be built against the LLVM of the `ld.lld` that loads it.

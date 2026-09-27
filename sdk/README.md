@@ -2,13 +2,14 @@
 
 A guest built once, naming no zkVM, gets its runtime and accelerators at link time from a zkVM SDK.
 An SDK is a directory with the two files of the zkvm-standards "Static Library and Linker Script"
-proposal, plus an optional list of ISA extensions:
+proposal, plus optional link settings:
 
 ```text
 <sdk>/
 ├── libzkvm.a       one LLVM bitcode module exporting exactly the guest ABI (`abi.txt`)
 ├── zkvm.ld         the vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
 ├── zkvm.features   optional: ISA extensions beyond RV64IM, added to the guest's code at link time
+├── zkvm.llvm-args  optional: LLVM options the vendor's own build uses for every guest, one per line
 └── zkvm-lto-plugin.so  optional: LLVM pass plugin run at the end of LTO (native, per host)
 ```
 
@@ -27,11 +28,15 @@ Requirements: nightly Rust with `rust-src`, and LLVM tools no older than nightly
 
 Each vendor crate (`openvm/`, `zisk/`, `sp1/`) is a `staticlib` built for its own target in
 `targets/`: the generic target with only `os`/`vendor` (and, for OpenVM, `+unaligned-scalar-mem`)
-changed, so the vendor's cfgs select its accelerated paths. `vendor-archive.sh` then merges the
+changed, so the vendor's cfgs select its accelerated paths, and with the zkVM's `zkvm.features`, as
+in the vendor's own guest builds. `vendor-archive.sh` then merges the
 archive's bitcode into one module and internalizes everything outside the ABI, so the vendor's
 `core`, panic handler and allocator cannot collide with the guest's. A native vendor member that
 rustc kept out of LTO (OpenVM's `memcpy`) gets an anchor that `zkvm.ld` names in `EXTERN`, so it is
-always linked instead of losing to the guest's weak `compiler_builtins`.
+always linked instead of losing to the guest's weak `compiler_builtins`. `vendor-archive.sh` also
+drops `noinline` from the ABI exports: ZisK marks `sys_alloc_aligned` `#[inline(never)]` for its own
+builds, whose `std` allocates without calling it, and a generic guest's `std` calls it on every
+allocation. Across the ABI, as inside a vendor's own guest, the link's LTO decides what to inline.
 
 The `software` control keeps the vendor's runtime and replaces every `zkvm_*` symbol with the plain
 RISC-V implementations in `software/` (`revm-precompile`'s pure-Rust backends). A guest linked
@@ -60,9 +65,13 @@ The guest is a `staticlib` defining `int main(void)`, built for the generic
 LD_LLD=ld.lld sdk/link.sh <sdk> <guest.a> <guest.elf> [llvm-option...]
 ```
 
-Options after the output are LLVM options for this guest on this zkVM, passed as `-mllvm`: tuning
-that belongs to the guest team, such as the Optuna-tuned set ere's ZisK compiler uses for ethrex
-(`ERE_PROFILE=ethrex`, starting `--inline-threshold=4749`). They become part of the link command.
+LLVM options reach the link as `-mllvm` from two places. The SDK's `zkvm.llvm-args` holds what the
+vendor's own build passes for every guest (SP1: `-misched-prera-direction=bottomup` and
+`-misched-postra-direction=bottomup`, from `cargo prove build`). Options after the output are this
+guest's tuning on this zkVM, which belongs to the guest team, such as the Optuna-tuned set ere's ZisK
+compiler uses for ethrex (`ERE_PROFILE=ethrex`, starting `--inline-threshold=4749`). Guest options
+come last, so they can override the vendor's. Together, the two reproduce the optimization settings
+of ere's `rust-customized` compilers exactly. Both become part of the link command.
 
 `link.sh` rejects a guest object that does not define `main`, defines an ABI symbol, or needs a
 symbol outside the ABI. The guest object is built for plain RV64IM; if the SDK has a
@@ -86,8 +95,8 @@ which copy is linked, and so the ELF bytes and the verification key.
 - `zkvm.features` follows each vendor's own guest builds: OpenVM `+unaligned-scalar-mem`; ZisK
   `+zba,+zbb,+zbkb,+zbs,+unaligned-scalar-mem` (misaligned access also lowers its proving cost);
   SP1 none, because its executor rejects misaligned loads, although the zkvm-standards RISC-V
-  target requires `Zicclsm`. The ELF's RISC-V `arch` attribute still reads RV64IM, since it comes
-  from module metadata, not from the function attributes.
+  target requires `Zicclsm`. ZisK's own toolchain leaves out Zba; the SDK keeps it, since without
+  it the linked guests take more steps.
 - The ZisK SDK carries `plugins/zisk-dma`, an LLVM pass plugin that lowers small constant-size
   `memcpy`, `memset` and `memcmp`/`bcmp` (16 to 2047 bytes) at the end of LTO to the inline DMA
   patterns ZisK's transpiler fuses into one `dma_xmem*` operation, as ZisK's own compiler emits them.
