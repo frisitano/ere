@@ -10,6 +10,7 @@ proposal, plus optional link settings:
 ├── zkvm.ld         the vendor linker script; `INPUT(-lzkvm)` pulls the archive into the link
 ├── zkvm.features   optional: ISA extensions beyond RV64IM, added to the guest's code at link time
 ├── zkvm.llvm-args  optional: LLVM options the vendor's own build uses for every guest, one per line
+├── libzkvm_software.a  every `zkvm_*` accelerator in plain RISC-V, linked only if selected
 └── zkvm-lto-plugin.so  optional: LLVM pass plugin run at the end of LTO (native, per host)
 ```
 
@@ -19,9 +20,7 @@ Rust.
 ## Build an SDK
 
 ```bash
-sdk/build.sh <openvm|zisk|sp1> <out-dir>            # the SDK
-sdk/build.sh <openvm|zisk|sp1> <out-dir> software   # its negative control
-sdk/build.sh <openvm|zisk|sp1> <out-dir> 'software=zkvm_u256_*,zkvm_keccak256'   # selected ones
+sdk/build.sh <openvm|zisk|sp1> <out-dir>
 ```
 
 Requirements: nightly Rust with `rust-src`, and LLVM tools no older than nightly's LLVM
@@ -39,12 +38,14 @@ drops `noinline` from the ABI exports: ZisK marks `sys_alloc_aligned` `#[inline(
 builds, whose `std` allocates without calling it, and a generic guest's `std` calls it on every
 allocation. Across the ABI, as inside a vendor's own guest, the link's LTO decides what to inline.
 
-The `software` control keeps the vendor's runtime and replaces every `zkvm_*` symbol with the plain
-RISC-V implementations in `software/` (`revm-precompile`'s pure-Rust backends). A guest linked
-against it computes the same results with no acceleration, which is the baseline for the
-acceleration check. `software=<pattern>,...` replaces only the accelerators matching a pattern (a
-symbol, or a prefix ending in `*`), and the SDK lists them in `zkvm.software`. The guest object is
-the same in every case, so one link per configuration measures what each accelerator is worth.
+Every SDK also carries `libzkvm_software.a`: every `zkvm_*` accelerator in plain RISC-V, from
+`software/` (`revm-precompile`'s pure-Rust backends and `ruint`), compiled with the zkVM's features.
+It is linked only when `link.sh --software <pattern>,...` selects accelerators (a symbol, or a prefix
+ending in `*`: `zkvm_u256_*`, or `zkvm_*` for all). `link.sh` then internalizes the selected symbols
+in the vendor module and exports only them from the software module, which takes seconds, so each
+configuration is one link from the same SDK and guest object. That measures what each accelerator
+is worth, down to all-software as the acceleration check's negative control. The vendor's own
+internal uses of an accelerator keep the vendor's code.
 
 ## 256-bit arithmetic
 

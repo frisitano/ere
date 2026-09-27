@@ -2,27 +2,23 @@
 # Builds one zkVM SDK: a directory holding `libzkvm.a` (the vendor archive, one LLVM bitcode
 # module exporting only the guest ABI in `abi.txt`), `zkvm.ld` (the vendor linker script, which
 # pulls the archive in with `INPUT(-lzkvm)`) and, if the zkVM supports more than RV64IM,
-# `zkvm.features` (the LLVM target features `link.sh` adds to the guest's code), and optionally
-# `zkvm-lto-plugin.so` (an LLVM pass plugin `link.sh` runs at the end of LTO).
+# `zkvm.features` (the LLVM target features `link.sh` adds to the guest's code), optionally
+# `zkvm-lto-plugin.so` (an LLVM pass plugin `link.sh` runs at the end of LTO), and
+# `libzkvm_software.a` (every `zkvm_*` accelerator in plain RISC-V, from `software/`, which
+# `link.sh --software` links in place of the vendor's for the accelerators it names).
 #
 # Until zkVM teams publish SDKs, ere builds them from pinned vendor sources, with stock nightly
 # Rust and `-Clinker-plugin-lto`. Each vendor crate is built for its own target spec in
 # `targets/`, the generic target with only `os`/`vendor` changed, so the vendor's cfgs select its
 # accelerated paths.
 #
-# With `software`, the SDK is the acceleration check's negative control: the vendor's runtime with
-# every `zkvm_*` symbol replaced by the plain RISC-V implementations in `software/`. With
-# `software=<pattern>[,<pattern>...]`, only the accelerators matching a pattern (a symbol name, or a
-# prefix ending in `*`, e.g. `zkvm_u256_*`) are replaced, to measure what each one is worth. The
-# guest object is the same either way; `zkvm.software` in the SDK lists what was replaced.
-#
-# Usage: build.sh <openvm|zisk|sp1> <out-dir> [software[=<pattern>,...]]
+# Usage: build.sh <openvm|zisk|sp1> <out-dir>
 # Requires: the pinned nightly (RUST_TOOLCHAIN) with rust-src, and LLVM tools no older than its
 # LLVM (LLVM_BIN).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-zkvm=$1 software=${3:-}
+zkvm=$1
 mkdir -p "$2"
 out=$(cd "$2" && pwd)
 LLVM_BIN=${LLVM_BIN:-/opt/homebrew/opt/llvm@22/bin}
@@ -59,38 +55,20 @@ build_staticlib() { # <crate dir> <target spec path> <build-std crates> [target 
 # The vendor's own code gets the same features as the guest's, as in the vendor's own builds.
 build_staticlib "$zkvm" "$here/targets/$spec.json" "$std" "$features"
 input='INPUT(-lzkvm)'
-rm -f "$out/libzkvm_software.a" "$out/zkvm.software"
-if [[ $software == software || $software == software=* ]]; then
-    patterns=${software#software}
-    patterns=${patterns#=}
-    regex='^zkvm_'
-    if [[ -n $patterns ]]; then
-        regex=$(tr ',' '\n' <<<"$patterns" | sed -e 's/[.]/\\./g' -e 's/[*]$/.*/' -e 's/^/^/' -e 's/$/$/' |
-            paste -sd'|' -)
-    fi
-    grep -E "$regex" "$here/abi.txt" | grep '^zkvm_' >"$out/zkvm.software" || {
-        echo "software=$patterns matches no accelerator in abi.txt" >&2
-        exit 1
-    }
-    grep -vxF -f "$out/zkvm.software" "$here/abi.txt" >"$out/vendor.txt"
-    # The generic guest target, as `ere-compiler-sdk` builds guests for it.
-    build_staticlib software "$here/../crates/compiler/sdk/src/rust_rv64ima/riscv64ima-unknown-zkvm-elf.json" \
-        std,panic_abort
-    "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/riscv64ima-unknown-zkvm-elf/release/libzkvm_software.a" \
-        "$out/libzkvm_software.a" "$out/zkvm.software"
-    "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/$spec/release/libzkvm_$zkvm.a" "$out/libzkvm.a" \
-        "$out/vendor.txt"
-    rm "$out/vendor.txt"
-    input='INPUT(-lzkvm -lzkvm_software)'
-else
-    "$here/vendor-archive.sh" "$CARGO_TARGET_DIR/$spec/release/libzkvm_$zkvm.a" "$out/libzkvm.a"
-fi
+"$here/vendor-archive.sh" "$CARGO_TARGET_DIR/$spec/release/libzkvm_$zkvm.a" "$out/libzkvm.a"
+# The software fallback, for the generic guest target with this zkVM's features, like the guest.
+build_staticlib software "$here/../crates/compiler/sdk/src/rust_rv64ima/riscv64ima-unknown-zkvm-elf.json" \
+    std,panic_abort "$features"
+grep '^zkvm_' "$here/abi.txt" >"$out/accelerators.txt"
+"$here/vendor-archive.sh" "$CARGO_TARGET_DIR/riscv64ima-unknown-zkvm-elf/release/libzkvm_software.a" \
+    "$out/libzkvm_software.a" "$out/accelerators.txt"
+rm "$out/accelerators.txt"
 
 {
     printf '/* Pulls in the SDK archive: a guest link needs only -T this script and -L its directory. */\n'
     printf '%s\n' "$input"
     # Native vendor members that must always be linked, see `vendor-archive.sh`.
-    keep=$("$LLVM_BIN/llvm-nm" "$out"/libzkvm*.a 2>/dev/null |
+    keep=$("$LLVM_BIN/llvm-nm" "$out/libzkvm.a" 2>/dev/null |
         awk '$NF ~ /^__zkvm_sdk_keep_/ {print $NF}' | sort -u | paste -sd' ' -)
     [[ -n $keep ]] && printf 'EXTERN(%s)\n' "$keep"
     printf '\n'
