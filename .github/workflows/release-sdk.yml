@@ -18,8 +18,10 @@ jobs:
   build:
     name: Build ${{ matrix.zkvm }} SDK
     runs-on: ubuntu-latest
-    # A clean image with LLVM 22 only. On the runner image, the preinstalled LLVMs break `bindgen`
-    # in vendor build scripts (`unknown type name 'uint8_t'` in `zkvm_accelerators.h`).
+    # A clean image with LLVM 22 only. On the runner image, `bindgen` in the vendor build scripts
+    # picks up the preinstalled `clang-18` to detect include paths and then fails to parse
+    # `zkvm_accelerators.h` (`unknown type name 'uint8_t'`). Pinning both `CLANG_PATH` and
+    # `LIBCLANG_PATH` to LLVM 22 also works; pinning `LIBCLANG_PATH` alone does not.
     container: ubuntu:24.04
     strategy:
       fail-fast: false

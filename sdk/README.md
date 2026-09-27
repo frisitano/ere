@@ -41,7 +41,8 @@ acceleration check.
 ## Published SDKs
 
 Guest CI does not build SDKs. Pushing a tag `sdk-*` runs `.github/workflows/release-sdk.yml`, which
-builds the three SDKs (in a clean Ubuntu 24.04 container with LLVM 22 only) and publishes, as
+builds the three SDKs (in a clean Ubuntu 24.04 container with LLVM 22 only, since `bindgen` in
+vendor build scripts breaks when another `clang` is on `PATH`) and publishes, as
 release assets, `sdk-<zkvm>.tar.gz`, `ere-link-tools.tar.gz` (`link.sh`, `abi.txt`, the generic
 guest target spec and `rust-toolchain`, the pinned nightly) and `SHA256SUMS`. ere-guests' reusable
 `link-guest` workflow and `build-guest-object` action take a release tag and use these assets, so
