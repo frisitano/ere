@@ -125,3 +125,6 @@ unsafe extern "C" fn sys_argv(
 ) -> usize {
     0
 }
+
+#[path = "../../shims/u256_mulmod.rs"]
+mod u256_mulmod;

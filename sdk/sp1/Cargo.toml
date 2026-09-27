@@ -9,6 +9,8 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
+# `zkvm_u256_mulmod` in software (`../shims/u256_mulmod.rs`).
+ruint = { version = "1.20.1", default-features = false }
 # SP1's C-ABI SDK: `_start` (sp1-zkvm), `read_input`/`write_output` and every `zkvm_*` symbol.
 libzkevm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0" }
 

@@ -13,6 +13,21 @@ use ziskos as _;
 
 unsafe extern "C" {
     fn sys_write(fd: u32, write_buf: *const u8, nbytes: usize);
+    fn mul_mod_bytes256_c(a: *const u8, b: *const u8, m: *const u8, result: *mut u8);
+}
+
+/// `zkvm_u256_mulmod` of the zkvm-standards U256 interface draft, on ZisK's `arith256_mod`
+/// precompile. `mul_mod_bytes256_c` takes the same 32-byte big-endian words, returns zero for a
+/// zero modulus, and reads its inputs before writing, so `result` may alias one.
+#[unsafe(no_mangle)]
+unsafe extern "C" fn zkvm_u256_mulmod(
+    a: *const [u8; 32],
+    b: *const [u8; 32],
+    n: *const [u8; 32],
+    result: *mut [u8; 32],
+) -> i32 {
+    unsafe { mul_mod_bytes256_c(a.cast(), b.cast(), n.cast(), result.cast()) };
+    0
 }
 
 /// ZisK's exit syscall, as `_start` uses it for `main`'s return value.

@@ -320,3 +320,6 @@ unsafe extern "C" fn zkvm_secp256r1_verify(
     unsafe { *verified = DefaultCrypto.secp256r1_verify_signature(msg, sig, pubkey) };
     OK
 }
+
+#[path = "../../shims/u256_mulmod.rs"]
+mod u256_mulmod;

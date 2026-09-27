@@ -2996,6 +2996,7 @@ dependencies = [
  "ere-platform-zkvm",
  "k256",
  "revm-precompile",
+ "ruint",
  "sha3 0.10.9",
  "zkvm-interface",
 ]
