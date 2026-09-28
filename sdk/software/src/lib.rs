@@ -1,7 +1,8 @@
 //! Software control SDK library: every `zkvm_*` accelerator symbol, in plain RISC-V.
 //!
-//! `build.sh <zkvm> <out> software` links it in place of the vendor's accelerators and keeps the
-//! vendor's runtime. The acceleration check compares a guest's cost against this control.
+//! Every SDK ships it as `libzkvm_software.a`; `link.sh --software <pattern>` links it in place of
+//! the vendor's implementation for the accelerators that match, keeping the vendor's runtime and
+//! every other accelerator. A guest's cost with and without each accelerator is measured this way.
 //!
 //! Each symbol calls `revm-precompile`'s default `Crypto` with only its pure-Rust backends, the
 //! same boundary ere's `zkvm_interface` test vectors were recorded at. `zkvm_secp256k1_*` use
