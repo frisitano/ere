@@ -6,7 +6,9 @@
 //!
 //! Included by path. The including crate provides `u256_ops` with `mul`, `div`, `rem`, `add_mod`,
 //! `mul_mod` and `pow` over [`Limbs`], using its zkVM's precompiles where it has them and the
-//! software reference in [`sw`] otherwise.
+//! software reference in [`sw`] otherwise, plus `mul_to` and `mul_mod_to`, which write into the
+//! caller's result: [`by_value`] for a zkVM whose precompile returns its result, or its own for a
+//! zkVM whose precompile works in place, so no operand or result is copied more than it must be.
 
 use super::u256_ops as ops;
 
@@ -48,6 +50,29 @@ pub mod sw {
     }
 }
 
+/// `mul_to` and `mul_mod_to` from a zkVM's by-value `mul` and `mul_mod`.
+#[allow(dead_code)]
+pub mod by_value {
+    use super::{Limbs, ops};
+
+    /// # Safety
+    /// As `zkvm_u256_mul`.
+    pub unsafe fn mul_to(result: *mut Limbs, a: *const Limbs, b: *const Limbs) {
+        unsafe { *result = ops::mul(&*a, &*b) }
+    }
+
+    /// # Safety
+    /// As `zkvm_u256_mulmod`.
+    pub unsafe fn mul_mod_to(
+        result: *mut Limbs,
+        a: *const Limbs,
+        b: *const Limbs,
+        n: *const Limbs,
+    ) {
+        unsafe { *result = ops::mul_mod(&*a, &*b, &*n) }
+    }
+}
+
 /// `base ^ exponent mod 2^256` by left-to-right square-and-multiply on a zkVM's wrapping
 /// multiplication.
 #[allow(dead_code)]
@@ -68,7 +93,7 @@ pub fn pow_with(mul: impl Fn(&Limbs, &Limbs) -> Limbs, base: &Limbs, exponent: &
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn zkvm_u256_mul(a: *const Limbs, b: *const Limbs, result: *mut Limbs) -> i32 {
-    unsafe { *result = ops::mul(&*a, &*b) };
+    unsafe { ops::mul_to(result, a, b) };
     0
 }
 
@@ -102,7 +127,7 @@ unsafe extern "C" fn zkvm_u256_mulmod(
     n: *const Limbs,
     result: *mut Limbs,
 ) -> i32 {
-    unsafe { *result = ops::mul_mod(&*a, &*b, &*n) };
+    unsafe { ops::mul_mod_to(result, a, b, n) };
     0
 }
 

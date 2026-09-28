@@ -326,5 +326,6 @@ mod u256;
 
 /// Every `zkvm_u256_*` in software.
 mod u256_ops {
+    pub use super::u256::by_value::{mul_mod_to, mul_to};
     pub use super::u256::sw::*;
 }

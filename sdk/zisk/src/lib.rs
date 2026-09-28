@@ -28,6 +28,7 @@ mod u256_ops {
     };
 
     use super::u256::Limbs;
+    pub use super::u256::by_value::{mul_mod_to, mul_to};
 
     pub fn mul(a: &Limbs, b: &Limbs) -> Limbs {
         wrapping_mul256(a, b)

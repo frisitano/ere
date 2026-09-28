@@ -35,34 +35,90 @@ unsafe extern "C" fn sys_argv(
 #[path = "../../shims/u256.rs"]
 mod u256;
 
-/// `zkvm_u256_*`: multiplication, modular multiplication and exponentiation on SP1's
-/// `UINT256_MUL` precompile, which computes `x * y mod m` with a zero `m` meaning 2^256; the rest
-/// in software.
+/// `zkvm_u256_*`: multiplication, modular multiplication and exponentiation on SP1's 256-bit
+/// precompiles; the rest in software.
+///
+/// - `mul` uses `UINT256_MUL_CARRY` (`a * b + c` into separate low and high words), which takes
+///   every operand by pointer, so the caller's operands are read where they are, with no copy.
+/// - `mul_mod` uses `UINT256_MUL` (`x = x * y mod m` in place, with `y` and `m` adjacent), so `m`
+///   and one operand are copied into its buffer; the product lands in `result`.
 mod u256_ops {
+    use core::{mem::MaybeUninit, ptr};
+
     pub use super::u256::sw::{add_mod, div, rem};
     use super::u256::{Limbs, pow_with};
 
     unsafe extern "C" {
         // `x = x * y mod m`, with `m` stored right after `y`; both pointers 8-byte aligned.
         fn syscall_uint256_mulmod(x: *mut Limbs, y: *const Limbs);
+        // `d = low(a * b + c)`, `e = high(a * b + c)`; all pointers 8-byte aligned.
+        fn syscall_uint256_mul_with_carry(
+            a: *const Limbs,
+            b: *const Limbs,
+            c: *const Limbs,
+            d: *mut Limbs,
+            e: *mut Limbs,
+        );
     }
 
-    fn uint256_mul(a: &Limbs, b: &Limbs, m: &Limbs) -> Limbs {
-        let mut x = *a;
-        let y_and_m = [*b, *m];
-        unsafe { syscall_uint256_mulmod(&mut x, y_and_m.as_ptr()) };
-        x
+    static ZERO: Limbs = [0; 4];
+
+    /// # Safety
+    /// As `zkvm_u256_mul`.
+    pub unsafe fn mul_to(result: *mut Limbs, a: *const Limbs, b: *const Limbs) {
+        let mut high = MaybeUninit::<Limbs>::uninit();
+        unsafe {
+            if ptr::eq(result.cast_const(), a) || ptr::eq(result.cast_const(), b) {
+                // SP1 does not document an output overlapping an input, so write elsewhere.
+                let mut low = MaybeUninit::<Limbs>::uninit();
+                syscall_uint256_mul_with_carry(a, b, &ZERO, low.as_mut_ptr(), high.as_mut_ptr());
+                *result = low.assume_init();
+            } else {
+                syscall_uint256_mul_with_carry(a, b, &ZERO, result, high.as_mut_ptr());
+            }
+        }
     }
 
+    /// By value, for `pow`'s square-and-multiply on its own locals.
     pub fn mul(a: &Limbs, b: &Limbs) -> Limbs {
-        uint256_mul(a, b, &[0; 4])
+        let mut x = MaybeUninit::<Limbs>::uninit();
+        unsafe {
+            mul_to(x.as_mut_ptr(), a, b);
+            x.assume_init()
+        }
+    }
+
+    /// # Safety
+    /// As `zkvm_u256_mulmod`.
+    pub unsafe fn mul_mod_to(
+        result: *mut Limbs,
+        a: *const Limbs,
+        b: *const Limbs,
+        n: *const Limbs,
+    ) {
+        unsafe {
+            if *n == [0; 4] {
+                *result = [0; 4];
+                return;
+            }
+            // `y ‖ m` first: `result` may alias `b` or `n`. Then `a` into `result` unless it is
+            // `a`.
+            let mut y_and_m = MaybeUninit::<[Limbs; 2]>::uninit();
+            let y = y_and_m.as_mut_ptr().cast::<Limbs>();
+            ptr::copy_nonoverlapping(b, y, 1);
+            ptr::copy_nonoverlapping(n, y.add(1), 1);
+            if !ptr::eq(result.cast_const(), a) {
+                ptr::copy_nonoverlapping(a, result, 1);
+            }
+            syscall_uint256_mulmod(result, y.cast_const());
+        }
     }
 
     pub fn mul_mod(a: &Limbs, b: &Limbs, n: &Limbs) -> Limbs {
-        if *n == [0; 4] {
-            [0; 4]
-        } else {
-            uint256_mul(a, b, n)
+        let mut x = MaybeUninit::<Limbs>::uninit();
+        unsafe {
+            mul_mod_to(x.as_mut_ptr(), a, b, n);
+            x.assume_init()
         }
     }
 

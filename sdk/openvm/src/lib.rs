@@ -136,8 +136,11 @@ mod u256_ops {
     // Links `openvm-bigint-guest`, which defines the hook below, into the archive.
     use openvm_bigint_guest as _;
 
-    pub use super::u256::sw::{add_mod, div, mul_mod, rem};
     use super::u256::{Limbs, pow_with};
+    pub use super::u256::{
+        by_value::{mul_mod_to, mul_to},
+        sw::{add_mod, div, mul_mod, rem},
+    };
 
     unsafe extern "C" {
         // `openvm-bigint-guest`'s hook for the Int256 `MUL` instruction, over little-endian bytes.
