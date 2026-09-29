@@ -1,0 +1,39 @@
+[package]
+name = "zkvm-sp1"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# SP1's C-ABI SDK: `_start` (sp1-zkvm), `read_input`/`write_output` and the `zkvm_*` accelerators,
+# which without its default `exports` feature this crate exports.
+libzkevm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", default-features = false }
+# `sp1-zkvm`'s heap, which each accelerator's wrapper rewinds (as `libzkevm` builds it).
+sp1-zkvm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", default-features = false }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"
+
+# A vendor archive is built with the vendor's patch set. Without this, `sp1-zkvm`'s public-values
+# hasher resolves to crates.io `sha2` and runs in software inside the runtime.
+[patch.crates-io]
+# `sp1-zkvm`'s heap (`TlsfHeap`) is the SDK's `embedded-alloc` stand-in
+# (`staticlib-embedded-alloc/`), a bump allocator that each accelerator's wrapper rewinds.
+embedded-alloc = { path = "../staticlib-embedded-alloc" }
+sha2 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", tag = "patch-sha2-0.10.9-sp1-6.2.0" }
+sp1-lib = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+
+# `libzkevm` v6.6.0's `zkvm_bls12_*` and `zkvm_ripemd160` do not follow the zkvm-standards encoding;
+# ere's SP1 test guests pin the same fix (https://github.com/succinctlabs/sp1/pull/2865), on which
+# this revision adds `libzkevm`'s `exports` feature.
+[patch."https://github.com/succinctlabs/sp1"]
+sp1-lib = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+sp1-primitives = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+sp1-zkvm = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+libzkevm = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
