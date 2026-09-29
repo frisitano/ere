@@ -4,6 +4,7 @@ members = [
     "crates/compiler/cli",
     "crates/compiler/core",
     "crates/compiler/openvm",
+    "crates/compiler/sdk",
     "crates/compiler/sp1",
     "crates/compiler/zisk",
     # Platform
@@ -11,6 +12,7 @@ members = [
     "crates/platform/openvm",
     "crates/platform/sp1",
     "crates/platform/zisk",
+    "crates/platform/zkvm",
     # Prover
     "crates/prover/core",
     "crates/prover/openvm",
@@ -178,12 +180,14 @@ ziskos = { version = "1.3.0-alpha", default-features = false }
 ere-compiler = { path = "crates/compiler/cli" }
 ere-compiler-core = { path = "crates/compiler/core" }
 ere-compiler-openvm = { path = "crates/compiler/openvm" }
+ere-compiler-sdk = { path = "crates/compiler/sdk" }
 ere-compiler-sp1 = { path = "crates/compiler/sp1" }
 ere-compiler-zisk = { path = "crates/compiler/zisk" }
 ere-platform-core = { path = "crates/platform/core" }
 ere-platform-openvm = { path = "crates/platform/openvm" }
 ere-platform-sp1 = { path = "crates/platform/sp1" }
 ere-platform-zisk = { path = "crates/platform/zisk" }
+ere-platform-zkvm = { path = "crates/platform/zkvm" }
 ere-prover-core = { path = "crates/prover/core" }
 ere-prover-openvm = { path = "crates/prover/openvm" }
 ere-prover-sp1 = { path = "crates/prover/sp1" }

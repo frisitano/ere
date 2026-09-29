@@ -74,13 +74,14 @@ pub(crate) mod tests {
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     use ere_compiler_core::{Compiler, Elf};
+    use ere_compiler_sdk::SdkRustRv64im;
     use ere_compiler_zisk::ZiskRustRv64imaCustomized;
     use ere_prover_core::{Input, ProverResource, RemoteProverConfig, codec::Encode, zkVMProver};
     use ere_util_test::{
         codec::BincodeLegacy,
         host::{
             TestCase, run_zkvm_execute, run_zkvm_execute_estimated_cost, run_zkvm_prove,
-            testing_guest_directory,
+            testing_guest_directory, testing_sdk,
         },
         program::{
             basic::BasicProgram,
@@ -230,6 +231,19 @@ pub(crate) mod tests {
     fn test_execute_zkvm_interface() {
         let elf = ZiskRustRv64imaCustomized
             .compile(testing_guest_directory("zisk", "zkvm_interface"), &[])
+            .unwrap();
+        let zkvm = ZiskProver::new(elf, ProverResource::Cpu).unwrap();
+
+        for test_case in zkvm_interface::test_cases() {
+            run_zkvm_execute(&zkvm, &test_case);
+        }
+    }
+
+    /// The zkVM-agnostic `no_std` `zkvm_interface` guest, linked against the zisk SDK.
+    #[test]
+    fn test_execute_zkvm_interface_sdk() {
+        let elf = SdkRustRv64im::new(testing_sdk("zisk"))
+            .compile(testing_guest_directory("zkvm", "zkvm_interface"), &[])
             .unwrap();
         let zkvm = ZiskProver::new(elf, ProverResource::Cpu).unwrap();
 

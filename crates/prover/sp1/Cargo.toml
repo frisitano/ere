@@ -35,6 +35,7 @@ sysinfo.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 ere-compiler-sp1.workspace = true
+ere-compiler-sdk.workspace = true
 ere-util-test = { workspace = true, features = ["host"] }
 
 [features]

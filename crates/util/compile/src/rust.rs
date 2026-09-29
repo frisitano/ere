@@ -54,6 +54,7 @@ pub struct CargoBuildCmd {
     linker_script: Option<String>,
     features: Vec<String>,
     ignore_rust_version: bool,
+    envs: Vec<(String, String)>,
 }
 
 impl Default for CargoBuildCmd {
@@ -66,6 +67,7 @@ impl Default for CargoBuildCmd {
             linker_script: Default::default(),
             features: Default::default(),
             ignore_rust_version: Default::default(),
+            envs: Default::default(),
         }
     }
 }
@@ -123,6 +125,13 @@ impl CargoBuildCmd {
         self
     }
 
+    /// Extra environment variable for `cargo build`.
+    pub fn env(mut self, key: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.envs
+            .push((key.as_ref().to_string(), value.as_ref().to_string()));
+        self
+    }
+
     /// Takes the path to the manifest directory and the target, then
     /// runs configured `cargo build` and returns built ELF.
     pub fn exec(
@@ -130,6 +139,41 @@ impl CargoBuildCmd {
         manifest_dir: impl AsRef<Path>,
         target: impl Into<RustTarget>,
     ) -> Result<Vec<u8>, CommonError> {
+        let (metadata, target) = self.build(manifest_dir, target)?;
+        let package = metadata.root_package().unwrap();
+        let elf_path = metadata
+            .target_directory
+            .join(target.name())
+            .join(&self.profile)
+            .join(&package.name);
+        let elf =
+            fs::read(&elf_path).map_err(|err| CommonError::read_file("elf", &elf_path, err))?;
+
+        Ok(elf)
+    }
+
+    /// Like [`Self::exec`], for a package whose library target is a `staticlib`: returns the path
+    /// of the built archive.
+    pub fn exec_staticlib(
+        &self,
+        manifest_dir: impl AsRef<Path>,
+        target: impl Into<RustTarget>,
+    ) -> Result<PathBuf, CommonError> {
+        let (metadata, target) = self.build(manifest_dir, target)?;
+        let package = metadata.root_package().unwrap();
+        Ok(metadata
+            .target_directory
+            .join(target.name())
+            .join(&self.profile)
+            .join(format!("lib{}.a", package.name.replace('-', "_")))
+            .into())
+    }
+
+    fn build(
+        &self,
+        manifest_dir: impl AsRef<Path>,
+        target: impl Into<RustTarget>,
+    ) -> Result<(Metadata, RustTarget), CommonError> {
         let metadata = cargo_metadata(manifest_dir.as_ref())?;
         let package = metadata.root_package().unwrap();
 
@@ -201,6 +245,7 @@ impl CargoBuildCmd {
         let mut cmd = Command::new("cargo");
         let status = cmd
             .env("CARGO_ENCODED_RUSTFLAGS", encoded_rustflags)
+            .envs(self.envs.iter().map(|(key, value)| (key, value)))
             .args(args)
             .status()
             .map_err(|err| CommonError::command(&cmd, err))?;
@@ -209,15 +254,7 @@ impl CargoBuildCmd {
             return Err(CommonError::command_exit_non_zero(&cmd, status, None));
         }
 
-        let elf_path = metadata
-            .target_directory
-            .join(target.name())
-            .join(&self.profile)
-            .join(&package.name);
-        let elf =
-            fs::read(&elf_path).map_err(|err| CommonError::read_file("elf", &elf_path, err))?;
-
-        Ok(elf)
+        Ok((metadata, target))
     }
 }
 

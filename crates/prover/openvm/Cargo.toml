@@ -25,6 +25,7 @@ ere-verifier-openvm.workspace = true
 
 [dev-dependencies]
 ere-compiler-openvm.workspace = true
+ere-compiler-sdk.workspace = true
 ere-util-test = { workspace = true, features = ["host"] }
 
 [features]

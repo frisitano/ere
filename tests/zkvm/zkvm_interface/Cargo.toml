@@ -1,0 +1,13 @@
+[package]
+name = "ere-test-zkvm-zkvm-interface-guest"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+ere-platform-zkvm = { path = "../../../crates/platform/zkvm" }
+ere-util-test = { path = "../../../crates/util/test" }
