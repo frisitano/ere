@@ -14,12 +14,17 @@ sp1-libzkevm.workspace = true
 ere-platform-core.workspace = true
 
 [features]
-default = ["lib", "libm"]
+default = ["exports", "lib", "libm"]
 blake3 = ["sp1-zkvm/blake3"]
 lib = ["sp1-zkvm/lib"]
 libm = ["sp1-zkvm/libm"]
 verify = ["sp1-zkvm/verify"]
 untrusted_programs = ["sp1-zkvm/untrusted_programs"]
+# `libzkevm`'s own exports of the zkvm-standards C ABI's accelerators.
+exports = ["sp1-libzkevm/exports"]
+# The zkvm-standards C ABI for a staticlib (`staticlib/build.sh`), with `libzkevm`'s accelerators
+# wrapped to free what each allocates. Without `exports`, which would define them twice.
+c-abi = []
 
 [lints]
 workspace = true

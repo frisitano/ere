@@ -3,6 +3,8 @@
 
 extern crate alloc;
 
+#[cfg(all(feature = "c-abi", target_os = "openvm"))]
+mod c_abi;
 mod platform;
 #[cfg(feature = "zkvm-accelerator")]
 mod zkvm_accelerator;
