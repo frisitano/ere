@@ -33,6 +33,9 @@ ere-platform-core.workspace = true
 default = ["getrandom-unsupported", "zkvm-accelerator"]
 getrandom-unsupported = ["openvm/getrandom-unsupported"]
 heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
+# Each `zkvm_*` accelerator frees, on return, everything it allocated from OpenVM's heap. Needs the
+# ere SDK's `embedded-alloc` (`sdk/embedded-alloc`), patched in, whose heap can be rewound.
+scoped-heap = ["heap-embedded-alloc"]
 std = ["openvm/std"]
 zkvm-accelerator = [
     "dep:openvm-algebra-guest",
