@@ -5,6 +5,8 @@ extern crate alloc;
 
 use sp1_libzkevm as _;
 
+#[cfg(all(feature = "c-abi", target_os = "zkvm"))]
+mod c_abi;
 mod platform;
 
 pub use ere_platform_core::Platform;
