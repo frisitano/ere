@@ -1,0 +1,25 @@
+[package]
+name = "zkvm-openvm"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+ere-platform-openvm = { path = "../../crates/platform/openvm", default-features = false, features = ["getrandom-unsupported", "zkvm-accelerator", "scoped-heap"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview", default-features = false }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.1.0-preview" }
+
+[profile.release]
+codegen-units = 1
+lto = "off"
+panic = "abort"
+
+# OpenVM's heap (`heap-embedded-alloc`, through `ere-platform-openvm`'s `scoped-heap`) is the SDK's
+# `embedded-alloc`: a bump allocator over OpenVM's private region (`_end` in `zkvm.ld`), which each
+# accelerator rewinds on return.
+[patch.crates-io]
+embedded-alloc = { path = "../embedded-alloc" }
