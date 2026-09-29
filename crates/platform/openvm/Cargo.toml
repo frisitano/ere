@@ -24,7 +24,6 @@ ark-ec = { workspace = true, optional = true }
 ark-serialize = { workspace = true, optional = true }
 aurora-engine-modexp = { workspace = true, optional = true }
 ripemd = { workspace = true, optional = true }
-zkvm-interface = { workspace = true, optional = true }
 
 # Local dependencies
 ere-platform-core.workspace = true
@@ -33,6 +32,12 @@ ere-platform-core.workspace = true
 default = ["getrandom-unsupported", "zkvm-accelerator"]
 getrandom-unsupported = ["openvm/getrandom-unsupported"]
 heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
+# Each `zkvm_*` accelerator frees, on return, everything it allocated from OpenVM's heap. Needs the
+# `embedded-alloc` stand-in (`../staticlib/embedded-alloc`), patched in, whose heap can be rewound.
+scoped-heap = ["heap-embedded-alloc"]
+# The zkvm-standards C ABI for a staticlib (`staticlib/build.sh`): the accelerators, each freeing
+# what it allocates, plus `read_input`, `write_output` and `abort`.
+c-abi = ["zkvm-accelerator", "scoped-heap"]
 std = ["openvm/std"]
 zkvm-accelerator = [
     "dep:openvm-algebra-guest",
@@ -49,7 +54,6 @@ zkvm-accelerator = [
     "dep:ark-serialize",
     "dep:aurora-engine-modexp",
     "dep:ripemd",
-    "dep:zkvm-interface",
 ]
 
 [lints]

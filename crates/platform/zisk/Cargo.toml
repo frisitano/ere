@@ -23,6 +23,10 @@ zisk-embedded-talc-alloc = ["ziskos/zisk-embedded-talc-alloc"]
 zisk-embedded-tlfs-alloc = ["ziskos/zisk-embedded-tlfs-alloc"]
 # NOTE: This enables `cycle_scope_*` to emit profile syscalls, the generated ELF can NOT be proved by ASM prover.
 cycle-scope = []
+# The zkvm-standards C ABI for a staticlib (`staticlib/build.sh`): `ziskos`'s `staticlib` mode,
+# which gives it a private heap and leaves the C ABI to this crate, which exports it with each
+# function rewinding that heap. Without `user-hints`, which pulls in tokio for the host prover.
+c-abi = ["inputcpy", "ziskos/staticlib"]
 
 [lints]
 workspace = true
