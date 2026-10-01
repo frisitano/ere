@@ -14,12 +14,19 @@ sp1-libzkevm.workspace = true
 ere-platform-core.workspace = true
 
 [features]
-default = ["lib", "libm"]
+default = ["exports", "lib", "libm"]
 blake3 = ["sp1-zkvm/blake3"]
 lib = ["sp1-zkvm/lib"]
 libm = ["sp1-zkvm/libm"]
 verify = ["sp1-zkvm/verify"]
 untrusted_programs = ["sp1-zkvm/untrusted_programs"]
+# `libzkevm`'s own exports of the zkvm-standards accelerators.
+exports = ["sp1-libzkevm/exports"]
+# Exports the zkvm-standards accelerators in place of `libzkevm`, each freeing, on return,
+# everything it allocated from `sp1-zkvm`'s heap. Without `exports`, which would define them
+# twice, and with the `embedded-alloc` stand-in (`../staticlib/embedded-alloc`) patched in, whose
+# heap can be rewound.
+scoped-heap = []
 
 [lints]
 workspace = true

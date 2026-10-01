@@ -157,7 +157,7 @@ sp1-recursion-executor = { git = "https://github.com/succinctlabs/sp1", tag = "v
 sp1-sdk = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0" }
 sp1-verifier = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0" }
 sp1-zkvm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", default-features = false }
-sp1-libzkevm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", package = "libzkevm" }
+sp1-libzkevm = { git = "https://github.com/succinctlabs/sp1", tag = "v6.6.0", package = "libzkevm", default-features = false }
 
 # ZisK dependencies
 proofman-fields = "1.3.0-alpha"
@@ -173,6 +173,7 @@ zisk-transpiler-riscv = { git = "https://github.com/han0110/zisk.git", branch = 
 ziskemu = { git = "https://github.com/han0110/zisk.git", branch = "patch/v1.3.0-alpha" }
 zisk-verifier = "1.3.0-alpha"
 ziskos = { version = "1.3.0-alpha", default-features = false }
+zisk-zkvm-interface = "1.3.0-alpha"
 
 # Local dependencies
 ere-compiler = { path = "crates/compiler/cli" }
@@ -204,3 +205,23 @@ ere-util-build = { path = "crates/util/build" }
 ere-util-compile = { path = "crates/util/compile" }
 ere-util-test = { path = "crates/util/test" }
 ere-util-tokio = { path = "crates/util/tokio" }
+
+# For the zkVM staticlibs (`crates/platform/staticlib/build.sh`), which build the platform crates
+# with their `scoped-heap` feature. A patch applies only to builds of this workspace, never to
+# guests that depend on these crates.
+#
+# SP1's and OpenVM's runtimes register `embedded-alloc` heaps (SP1's `TlsfHeap`, OpenVM's
+# `LlffHeap`). This stand-in is a bump allocator over the vendor's private region, which each
+# accelerator rewinds when it returns. Only guest builds compile it.
+[patch.crates-io]
+embedded-alloc = { path = "crates/platform/staticlib/embedded-alloc" }
+sp1-lib = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+
+# `libzkevm` v6.6.0's `zkvm_bls12_*` and `zkvm_ripemd160` do not follow the zkvm-standards encoding;
+# ere's SP1 test guests pin the same fix (https://github.com/succinctlabs/sp1/pull/2865), on which
+# this revision adds `libzkevm`'s `exports` feature. It changes nothing outside `zkevm/`, so SP1's
+# other crates build from the same code as v6.6.0.
+[patch."https://github.com/succinctlabs/sp1"]
+libzkevm = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+sp1-lib = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }
+sp1-zkvm = { git = "https://github.com/frisitano/sp1", rev = "223b9482ae5f5114fd7f75443b4c8c21a2f94f51" }

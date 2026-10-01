@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 # ZisK dependencies
 ziskos.workspace = true
+zisk-zkvm-interface = { workspace = true, optional = true }
 
 # Local dependencies
 ere-platform-core.workspace = true
@@ -23,6 +24,10 @@ zisk-embedded-talc-alloc = ["ziskos/zisk-embedded-talc-alloc"]
 zisk-embedded-tlfs-alloc = ["ziskos/zisk-embedded-tlfs-alloc"]
 # NOTE: This enables `cycle_scope_*` to emit profile syscalls, the generated ELF can NOT be proved by ASM prover.
 cycle-scope = []
+# `ziskos`'s `staticlib` mode, which gives it a private heap and leaves the zkvm-standards
+# accelerators and I/O to this crate, which exports them with each one rewinding that heap first.
+# Without `user-hints`, which pulls in tokio for the host prover.
+scoped-heap = ["inputcpy", "ziskos/staticlib", "dep:zisk-zkvm-interface"]
 
 [lints]
 workspace = true

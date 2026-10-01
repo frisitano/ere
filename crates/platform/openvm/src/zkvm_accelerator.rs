@@ -74,6 +74,28 @@ mod openvm_init {
     openvm_ecc_guest::sw_macros::sw_init! { "Bn254G1Affine", "Secp256k1Point", "P256Point", "Bls12_381G1Affine" }
 }
 
+/// With `scoped-heap`, frees on drop everything allocated from OpenVM's heap since it was created,
+/// so nothing an accelerator allocates outlives the call.
+struct HeapScope(#[cfg(all(feature = "scoped-heap", target_os = "openvm"))] usize);
+
+impl HeapScope {
+    fn new() -> Self {
+        Self(
+            #[cfg(all(feature = "scoped-heap", target_os = "openvm"))]
+            openvm::platform::heap::embedded::HEAP.mark(),
+        )
+    }
+}
+
+#[cfg(all(feature = "scoped-heap", target_os = "openvm"))]
+impl Drop for HeapScope {
+    fn drop(&mut self) {
+        // SAFETY: the accelerator's outputs are in caller memory; nothing it allocated is used
+        // again.
+        unsafe { openvm::platform::heap::embedded::HEAP.release(self.0) }
+    }
+}
+
 const BN_FQ_LEN: usize = 32;
 const BN_G1_LEN: usize = 64;
 const BN_G2_LEN: usize = 128;
@@ -90,6 +112,7 @@ unsafe extern "C" fn zkvm_keccak256(
     len: usize,
     output: *mut zkvm_keccak256_hash,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     unsafe { (*output).data = keccak256(slice::from_raw_parts(data, len)) };
     ZKVM_EOK
 }
@@ -101,6 +124,7 @@ unsafe extern "C" fn zkvm_secp256k1_verify(
     pubkey: *const zkvm_secp256k1_pubkey,
     verified: *mut bool,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     unsafe { *verified = verify_secp256k1(&(*msg).data, &(*sig).data, &(*pubkey).data) };
     ZKVM_EOK
 }
@@ -112,6 +136,7 @@ unsafe extern "C" fn zkvm_secp256k1_ecrecover(
     mut recid: u8,
     output: *mut zkvm_secp256k1_pubkey,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let (msg, sig) = unsafe { (&(*msg).data, &(*sig).data) };
 
     let Ok(mut signature) = Signature::from_slice(sig) else {
@@ -145,6 +170,7 @@ unsafe extern "C" fn zkvm_sha256(
     len: usize,
     output: *mut zkvm_sha256_hash,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     unsafe { (*output).data = Sha256::digest(slice::from_raw_parts(data, len)).into() };
     ZKVM_EOK
 }
@@ -155,6 +181,7 @@ unsafe extern "C" fn zkvm_ripemd160(
     len: usize,
     output: *mut zkvm_ripemd160_hash,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let digest = Ripemd160::digest(unsafe { slice::from_raw_parts(data, len) });
     // The C interface right-aligns the 20-byte digest in 32 bytes.
     let mut hash = [0u8; 32];
@@ -173,6 +200,7 @@ unsafe extern "C" fn zkvm_modexp(
     mod_len: usize,
     output: *mut u8,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let (base, exp, modulus) = unsafe {
         (
             slice::from_raw_parts(base, base_len),
@@ -201,6 +229,7 @@ unsafe extern "C" fn zkvm_bn254_g1_add(
     p2: *const zkvm_bn254_g1_point,
     result: *mut zkvm_bn254_g1_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let Some(p1) = (unsafe { read_bn_g1_point(&(*p1).data) }) else {
         return ZKVM_EFAIL;
     };
@@ -217,6 +246,7 @@ unsafe extern "C" fn zkvm_bn254_g1_mul(
     scalar: *const zkvm_bn254_scalar,
     result: *mut zkvm_bn254_g1_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let Some(point) = (unsafe { read_bn_g1_point(&(*point).data) }) else {
         return ZKVM_EFAIL;
     };
@@ -231,6 +261,7 @@ unsafe extern "C" fn zkvm_bn254_pairing(
     num_pairs: usize,
     verified: *mut bool,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     if num_pairs == 0 {
         unsafe { *verified = true };
         return ZKVM_EOK;
@@ -263,6 +294,7 @@ unsafe extern "C" fn zkvm_blake2f(
     t: *const zkvm_blake2f_offset,
     f: u8,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     // EIP-152 rejects a final block indicator other than 0 or 1.
     let final_block = match f {
         0 => false,
@@ -293,6 +325,7 @@ unsafe extern "C" fn zkvm_kzg_point_eval(
     proof: *const zkvm_kzg_proof,
     verified: *mut bool,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     // `from_slice` is the only constructor and rejects lengths other than its own.
     let (commitment, z, y, proof) = unsafe {
         (
@@ -319,6 +352,7 @@ unsafe extern "C" fn zkvm_bls12_g1_add(
     p2: *const zkvm_bls12_381_g1_point,
     result: *mut zkvm_bls12_381_g1_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     // EIP-2537 G1ADD validates on-curve only, not subgroup membership.
     let Some(p1) = (unsafe { read_bls_g1_point_no_subgroup_check(&(*p1).data) }) else {
         return ZKVM_EFAIL;
@@ -336,6 +370,7 @@ unsafe extern "C" fn zkvm_bls12_g1_msm(
     num_pairs: usize,
     result: *mut zkvm_bls12_381_g1_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     if num_pairs == 0 {
         unsafe { (*result).data = [0u8; BLS_G1_LEN] };
         return ZKVM_EOK;
@@ -361,6 +396,7 @@ unsafe extern "C" fn zkvm_bls12_g2_add(
     p2: *const zkvm_bls12_381_g2_point,
     result: *mut zkvm_bls12_381_g2_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     // EIP-2537 G2ADD validates on-curve only, not subgroup membership.
     let Some(p1) = (unsafe { read_bls_g2_point_no_subgroup_check(&(*p1).data) }) else {
         return ZKVM_EFAIL;
@@ -378,6 +414,7 @@ unsafe extern "C" fn zkvm_bls12_g2_msm(
     num_pairs: usize,
     result: *mut zkvm_bls12_381_g2_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     if num_pairs == 0 {
         unsafe { (*result).data = [0u8; BLS_G2_LEN] };
         return ZKVM_EOK;
@@ -403,6 +440,7 @@ unsafe extern "C" fn zkvm_bls12_pairing(
     num_pairs: usize,
     verified: *mut bool,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     if num_pairs == 0 {
         unsafe { *verified = true };
         return ZKVM_EOK;
@@ -432,6 +470,7 @@ unsafe extern "C" fn zkvm_bls12_map_fp_to_g1(
     field_element: *const zkvm_bls12_381_fp,
     result: *mut zkvm_bls12_381_g1_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let Some(field_element) = read_bls12_fp(unsafe { &(*field_element).data }) else {
         return ZKVM_EFAIL;
     };
@@ -445,6 +484,7 @@ unsafe extern "C" fn zkvm_bls12_map_fp2_to_g2(
     field_element: *const zkvm_bls12_381_fp2,
     result: *mut zkvm_bls12_381_g2_point,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     let field_element = unsafe { &(*field_element).data };
     let Some(c0) = read_bls12_fp(field_element[..BLS_FP_LEN].try_into().unwrap()) else {
         return ZKVM_EFAIL;
@@ -464,6 +504,7 @@ unsafe extern "C" fn zkvm_secp256r1_verify(
     pubkey: *const zkvm_secp256r1_pubkey,
     verified: *mut bool,
 ) -> zkvm_status {
+    let _heap = HeapScope::new();
     unsafe { *verified = verify_secp256r1(&(*msg).data, &(*sig).data, &(*pubkey).data) };
     ZKVM_EOK
 }
